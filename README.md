@@ -131,19 +131,31 @@ cd my-llm-wiki
 
 ---
 
-### Step 5. 웹 클리퍼(Web Clipper) 연동
+### Step 5. 자료 수집 도구 설정 (웹 클리퍼 & Zotero)
 
-웹 브라우징 중 유용한 기술 아티클이나 논문, 영상을 클릭 한 번으로 `raw/`에 수집할 수 있습니다.
+LLM Wiki는 2가지 수집 파이프라인을 통해 지식을 축적합니다:
 
+#### 1) 웹 아티클 & 영상 수집: Obsidian Web Clipper
 1. 브라우저에 **Obsidian Web Clipper** 확장 프로그램을 설치합니다.
 2. `templates/clipper/` 폴더에 6종의 클리퍼 템플릿 JSON이 준비되어 있습니다:
-   - `1-아티클.json` ➡️ `raw/articles/`로 저장
-   - `2-논문.json` ➡️ `raw/papers/`로 저장
-   - `3-유튜브.json` ➡️ `raw/videos/`로 저장
-   - `4-책.json` ➡️ `raw/books/`로 저장
-   - `5-라이트업.json` ➡️ `raw/writeups/`로 저장
-   - `6-인박스.json` ➡️ `raw/inbox/`로 저장
-3. 웹 클리퍼 설정에서 해당 JSON 템플릿을 등록하면 메타데이터(수집일, 저자, 출처 URL 등)가 자동으로 포함되어 깔끔하게 스크랩됩니다.
+   - `1-아티클.json` ➡️ `raw/articles/`
+   - `2-논문.json` ➡️ `raw/papers/`
+   - `3-유튜브.json` ➡️ `raw/videos/`
+   - `4-책.json` ➡️ `raw/books/`
+   - `5-라이트업.json` ➡️ `raw/writeups/`
+   - `6-인박스.json` ➡️ `raw/inbox/`
+3. 웹 클리퍼 설정에서 해당 JSON 템플릿을 등록하면 메타데이터가 자동으로 포함되어 깔끔하게 스크랩됩니다.
+
+#### 2) 학술 논문 & 전문 도서 수집: Zotero + Better BibTeX
+> **💡 PDF를 볼트에 직접 복사하지 않는 이유**:
+> 수십 페이지 논문 PDF를 볼트에 넣으면 검색과 인덱스가 오염되고 용량이 급증합니다.
+> 따라서 **PDF 원본은 Zotero가 보관**하고, **볼트에는 서지정보 정본(`.md`)만 기록**하는 짝 구조를 채택합니다.
+
+1. [Zotero 공식 사이트](https://www.zotero.org/)에서 Zotero 및 브라우저 커넥터를 설치합니다.
+2. [Better BibTeX for Zotero](https://retorque.re/zotero-better-bibtex/installation/) 최신 `.xpi` 플러그인을 다운로드하여 Zotero의 `도구(Tools)` → `플러그인(Add-ons)`에서 설치합니다.
+3. 논문을 수집하면 Better BibTeX가 표준 `citationKey`(예: `ghosh2026autoprov`)를 자동 생성합니다.
+4. `templates/원본 헤더 - 논문.md`를 복사하여 `raw/papers/<검색할이름>.md` 정본 노트를 만들고, `cite_key`와 `zotero_key`를 기재합니다.
+5. 위키에서 인용할 때는 `^[cite_key, §3.2]` 형태로 절/페이지 단위 정밀 인용을 수행합니다.
 
 ---
 
@@ -156,12 +168,11 @@ cd my-llm-wiki
 ```
 
 #### ① 자료 수집
-웹 클리퍼나 직접 작성을 통해 `raw/inbox/` 또는 `raw/articles/`에 읽은 글이나 문서를 추가합니다.
-(예: `raw/articles/새로운_기술_동향.md`)
+웹 클리퍼나 Zotero를 통해 `raw/inbox/` 또는 `raw/articles/`, `raw/papers/` 등에 자료를 수집합니다.
 
 #### ② 지식 인제스트 (`/ingest`)
 AI 도구에게 아래와 같이 요청합니다:
-> *"raw/articles/새로운_기술_동향.md 파일을 ingest해줘"*
+> *"raw/papers/Auto-Prov.md 파일을 ingest해줘"*
 
 **AI의 동작**:
 1. 기존 위키 목차(`wiki/index.md`)를 먼저 검토하여 중복되거나 연결할 수 있는 기존 페이지가 있는지 대조합니다.
@@ -177,16 +188,18 @@ AI 도구에게 아래와 같이 요청합니다:
 2. 축적된 `wiki/` 문서들을 근거로 들어 답변하며, 반드시 인용된 위키 문서(`[[문서명]]`)를 링크로 제시합니다.
 3. 위키에 없는 내용이라면 지어내지 않고 솔직하게 "위키에 없음"을 밝힙니다.
 
-#### ④ 위키 건강검진 (`/lint`)
+#### ④ 위키 건강검진 (`/lint` & `tools/lint.py`)
 자료가 쌓이면 주기적으로 위키의 건강 상태를 점검합니다:
-> *"위키 전체에 대해 lint를 실행해줘"*
+- **CLI 직접 실행**: 터미널에서 `python tools/lint.py` 실행
+- **AI 도구에게 요청**: *"위키 전체에 대해 lint를 실행해줘"*
 
-**AI의 동작**:
+**검사 항목**:
 - 고아 페이지 (백링크가 0개인 페이지)
 - 깨진 링크 (존재하지 않는 페이지를 가리키는 링크)
+- 파일명 축 접두어(`(AI활용)`, `(AI보호)`) 일치 여부
 - 원문 대비 자의적 해석 분량이 과도한 페이지 (팽창률 위반)
 - 출처가 1개뿐인 얇은 페이지 (`needs_source: true`)
-등을 전수 조사하여 리포트를 제공하며, 사용자의 확인 후에만 안전하게 수정합니다.
+검사 결과는 `reports/lint-YYYY-MM-DD.md`로 깔끔하게 보고서가 생성됩니다.
 
 #### ⑤ 산출물 작성 (`Output/`)
 위키에 지식이 충분히 쌓이면 보고서, 블로그 글, 강의 자료를 만듭니다:

@@ -1,0 +1,90 @@
+views:
+  - type: table
+    name: 위키 전체
+    filters:
+      and:
+        - file.inFolder("wiki")
+        - 'type != "log"'
+    order:
+      - file.name
+      - description
+      - status
+      - updated
+      - tags
+      - source
+
+  - type: table
+    name: 보강 필요
+    filters:
+      and:
+        - file.inFolder("wiki")
+        - 'needs_source == true'
+    order:
+      - file.name
+      - description
+      - source
+      - updated
+
+  - type: table
+    name: 모순 있음
+    filters:
+      and:
+        - file.inFolder("wiki")
+        - 'contested == true'
+    order:
+      - file.name
+      - description
+      - contradictions
+      - updated
+
+  - type: table
+    name: 검증 완료 stable
+    filters:
+      and:
+        - file.inFolder("wiki")
+        - 'status == "stable"'
+    order:
+      - file.name
+      - description
+      - source
+      - updated
+
+  - type: table
+    name: 원본 현황
+    filters:
+      and:
+        - file.inFolder("raw")
+    order:
+      - file.name
+      - description
+      - type
+      - axis
+      - ingested
+      - why
+      - collected
+
+  - type: table
+    name: 미인제스트
+    filters:
+      and:
+        - file.inFolder("raw")
+        - 'ingested == false'
+    order:
+      - file.name
+      - description
+      - type
+      - axis
+      - why
+
+  - type: cards
+    name: 축별 카드
+    filters:
+      and:
+        - file.inFolder("wiki")
+        - 'type != "log"'
+    groupBy:
+      property: tags
+    order:
+      - file.name
+      - description
+      - status
