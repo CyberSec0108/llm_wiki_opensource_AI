@@ -1,0 +1,71 @@
+# ==========================================
+# 1. Obsidian — 개인 UI 상태, 캐시, 플러그인
+# ==========================================
+.obsidian/workspace*.json
+.obsidian/graph.json
+.obsidian/cache/
+.obsidian/indexeddb/
+.obsidian/hotkeys.json
+.obsidian/plugins/
+.obsidian/themes/
+.trash/
+
+# ==========================================
+# 2. OS 및 IDE 임시 파일
+# ==========================================
+.DS_Store
+Thumbs.db
+desktop.ini
+.git_backup/
+.vscode/
+.idea/
+*.tmp
+*.swp
+*~
+
+# ==========================================
+# 3. 환경변수 및 보안 시크릿
+# ==========================================
+.env
+*.env
+*.key
+*.pem
+credentials.json
+
+# ==========================================
+# 4. 결과물 및 파생물 (Output)
+# ==========================================
+graphify-out/
+.ua/
+Output/*
+!Output/CLAUDE.md
+!Output/.gitkeep
+
+# ==========================================
+# 5. [개인 데이터 보호] 사용자 수집 자료 (raw)
+# ==========================================
+# 폴더 구조 유지용 .gitkeep 및 규칙(CLAUDE.md)만 추적하고
+# 수집된 모든 원본 데이터(문서/기사/도서/영상 등)는 제외
+raw/*/*
+!raw/*/.gitkeep
+raw/*.md
+!raw/CLAUDE.md
+
+# ==========================================
+# 6. [개인 데이터 보호] 사용자 컴파일 지식 (wiki)
+# ==========================================
+# 규칙 문서(CLAUDE.md), 예시 템플릿, 아카이브 설명서만 추적하고
+# 사용자가 작성한 지식 md 및 index.md, log.md 원본은 제외
+wiki/*.md
+!wiki/CLAUDE.md
+!wiki/*.example.md
+wiki/_archive/*
+!wiki/_archive/README.md
+!wiki/_archive/.gitkeep
+
+# ==========================================
+# 7. [개인 데이터 보호] 개인 맥락 문서 (context)
+# ==========================================
+# 개인 식별 및 비공개 작업 현황 파일 제외 (.example.md 템플릿만 공유)
+context/나의 핵심 맥락.md
+context/지금 하는 일.md

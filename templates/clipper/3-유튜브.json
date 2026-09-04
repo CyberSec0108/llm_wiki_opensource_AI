@@ -1,0 +1,74 @@
+{
+	"schemaVersion": "0.1.0",
+	"name": "raw · 유튜브",
+	"behavior": "create",
+	"noteContentFormat": "## 트랜스크립트\n\n<!-- 자동으로 안 들어오면 유튜브 '스크립트 표시'에서 복사해 여기 붙인다. 없으면 ingest 품질이 크게 떨어진다. -->\n\n## 챕터 / 설명\n\n{{content}}\n\n## 내가 표시한 부분\n\n{{highlights|map: item => item.text|join:\"\\n\\n\"}}",
+	"properties": [
+		{
+			"name": "type",
+			"value": "video",
+			"type": "text"
+		},
+		{
+			"name": "title",
+			"value": "{{title}}",
+			"type": "text"
+		},
+		{
+			"name": "source",
+			"value": "{{url}}",
+			"type": "text"
+		},
+		{
+			"name": "channel",
+			"value": "{{author}}",
+			"type": "text"
+		},
+		{
+			"name": "published",
+			"value": "{{published}}",
+			"type": "date"
+		},
+		{
+			"name": "duration",
+			"value": "",
+			"type": "text"
+		},
+		{
+			"name": "cite_key",
+			"value": "",
+			"type": "text"
+		},
+		{
+			"name": "collected",
+			"value": "{{date}}",
+			"type": "date"
+		},
+		{
+			"name": "why",
+			"value": "",
+			"type": "text"
+		},
+		{
+			"name": "axis",
+			"value": "",
+			"type": "text"
+		},
+		{
+			"name": "ingested",
+			"value": "false",
+			"type": "checkbox"
+		},
+		{
+			"name": "tags",
+			"value": "raw/video",
+			"type": "multitext"
+		}
+	],
+	"triggers": [
+		"https://www.youtube.com/watch",
+		"https://youtu.be/"
+	],
+	"noteNameFormat": "{{title}}",
+	"path": "raw/videos"
+}

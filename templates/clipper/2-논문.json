@@ -1,0 +1,81 @@
+{
+	"schemaVersion": "0.1.0",
+	"name": "raw · 논문",
+	"behavior": "create",
+	"noteContentFormat": "## 초록\n\n{{description}}\n\n## 내가 표시한 부분\n\n{{highlights|map: item => item.text|join:\"\\n\\n\"}}\n\n---\n\n## 원문\n\n{{content}}",
+	"properties": [
+		{
+			"name": "type",
+			"value": "paper",
+			"type": "text"
+		},
+		{
+			"name": "title",
+			"value": "{{title}}",
+			"type": "text"
+		},
+		{
+			"name": "source",
+			"value": "{{url}}",
+			"type": "text"
+		},
+		{
+			"name": "author",
+			"value": "{{author|split:\\\", \\\"|join}}",
+			"type": "multitext"
+		},
+		{
+			"name": "published",
+			"value": "{{published}}",
+			"type": "date"
+		},
+		{
+			"name": "venue",
+			"value": "",
+			"type": "text"
+		},
+		{
+			"name": "doi",
+			"value": "",
+			"type": "text"
+		},
+		{
+			"name": "cite_key",
+			"value": "",
+			"type": "text"
+		},
+		{
+			"name": "collected",
+			"value": "{{date}}",
+			"type": "date"
+		},
+		{
+			"name": "why",
+			"value": "",
+			"type": "text"
+		},
+		{
+			"name": "axis",
+			"value": "",
+			"type": "text"
+		},
+		{
+			"name": "ingested",
+			"value": "false",
+			"type": "checkbox"
+		},
+		{
+			"name": "tags",
+			"value": "raw/paper",
+			"type": "multitext"
+		}
+	],
+	"triggers": [
+		"https://arxiv.org/",
+		"https://www.usenix.org/",
+		"https://dl.acm.org/",
+		"https://ieeexplore.ieee.org/"
+	],
+	"noteNameFormat": "{{title}}",
+	"path": "raw/papers"
+}
