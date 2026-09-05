@@ -105,6 +105,10 @@
     border-bottom:1px solid var(--line)}
   .pend:last-child{border-bottom:0}
   .rv{padding:7px 0;border-bottom:1px solid var(--line);font-size:12px}
+  .lay{font-size:10px;padding:1px 7px;border-radius:9px;border:1px solid var(--line);
+    color:var(--dim);flex:none;line-height:1.6}
+  .lay-raw{border-color:var(--warn);color:var(--warn)}
+  .lay-wiki{border-color:var(--acc);color:var(--acc)}
 </style>
 </head>
 <body>
@@ -188,10 +192,15 @@
     <div class="split">
       <div class="box" style="margin-top:0">
         <input id="q" placeholder="검색 (본문까지)" style="margin-bottom:10px">
+        <div class="chips" style="margin-bottom:6px">
+          <span class="chip on" data-L="">전체</span>
+          <span class="chip" data-L="wiki">위키</span>
+          <span class="chip" data-L="raw">원본</span>
+        </div>
         <div class="chips" style="margin-bottom:9px">
-          <span class="chip on" data-f="">전체</span>
-          <span class="chip" data-f="(AI활용)">AI활용</span>
-          <span class="chip" data-f="(AI보호)">AI보호</span>
+          <span class="chip on" data-f="">축 전체</span>
+          <span class="chip" data-f="ai-for-security">AI활용</span>
+          <span class="chip" data-f="securing-ai">AI보호</span>
         </div>
         <div class="list" id="plist"></div>
       </div>
@@ -383,10 +392,12 @@ async function save(q) {
     loadStatus(); loadTags(); loadZotero(); }
 }
 
-let PAGES = [], FILT = '';
+let PAGES = [], FILT = '', LAYER = '';
 
 async function loadWiki() {
-  PAGES = await get('/pages'); drawList();
+  // 위키와 원본을 한 목록에서 본다. 위키의 서술이 어디서 왔는지
+  // 확인하려면 원본을 열어봐야 하기 때문이다.
+  PAGES = await get('/browse'); drawList();
 }
 
 function drawList(hits) {
@@ -401,12 +412,19 @@ function drawList(hits) {
     if (!hits.length) box.innerHTML = '<div class="muted">결과 없음</div>';
     return;
   }
-  PAGES.filter(p => !FILT || p.name.startsWith(FILT)).forEach(p => {
-    const d = el('div', 'item'); d.dataset.n = p.name;
-    d.appendChild(el('div', '', p.name));
-    d.appendChild(el('small', '', p.description || p.status));
-    d.onclick = () => openPage(p.name); box.appendChild(d);
+  const rows = PAGES.filter(p =>
+    (!LAYER || p.layer === LAYER) && (!FILT || p.axis === FILT));
+  rows.forEach(p => {
+    const d = el('div', 'item'); d.dataset.n = p.path || p.name;
+    const h = el('div');
+    h.style.cssText = 'display:flex;align-items:center;gap:7px';
+    h.appendChild(el('span', 'lay lay-' + p.layer, p.layer === 'raw' ? '원본' : '위키'));
+    h.appendChild(el('span', '', p.name));
+    d.appendChild(h);
+    d.appendChild(el('small', '', p.sub || p.status));
+    d.onclick = () => openPage(p.path || p.name); box.appendChild(d);
   });
+  if (!rows.length) box.innerHTML = '<div class="muted">해당 없음</div>';
 }
 
 async function openPage(name) {
@@ -416,14 +434,22 @@ async function openPage(name) {
   if (!d.ok) { $('#pbody').textContent = d.error; return; }
   const h = $('#phead'); h.innerHTML = '';
   const t = el('div'); t.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+  t.appendChild(el('span', 'lay lay-' + d.layer, d.layer === 'raw' ? '원본' : '위키'));
   t.appendChild(el('b', '', d.name));
   if (d.meta.status) t.appendChild(el('span', 'pill', d.meta.status));
+  if (d.layer === 'raw') {
+    t.appendChild(el('span', 'pill', d.meta.ingested === 'true' ? '반영됨' : '미인제스트'));
+    if (d.meta.axis) t.appendChild(el('span', 'pill', d.meta.axis));
+  }
   if (d.meta.needs_source === 'true') t.appendChild(el('span', 'pill', '보강필요'));
   const ob = el('a', 'pill'); ob.textContent = 'Obsidian에서 열기'; ob.style.cursor = 'pointer';
   ob.href = 'obsidian://open?vault=' + encodeURIComponent(d.vault) +
             '&file=' + encodeURIComponent(d.path.replace(/\.md$/, ''));
   t.appendChild(ob); h.appendChild(t);
   if (d.meta.source) h.appendChild(el('small', 'muted', '출처 ' + d.meta.source));
+  if (d.meta.why) h.appendChild(el('small', 'muted', '왜 담았나 — ' + d.meta.why));
+  if (d.layer === 'raw')
+    h.appendChild(el('small', 'muted', '원본은 불변이다. 고치지 않는다.'));
   $('#pbody').innerHTML = d.html;
   const bl = el('div', 'box'); bl.style.marginTop = '18px';
   bl.appendChild(el('h2', '', '이 페이지를 참조하는 곳 (' + d.backlinks.length + ')'));
@@ -439,6 +465,10 @@ async function openPage(name) {
 document.querySelectorAll('[data-f]').forEach(c => c.onclick = () => {
   document.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === c));
   FILT = c.dataset.f; $('#q').value = ''; drawList(); });
+
+document.querySelectorAll('[data-L]').forEach(c => c.onclick = () => {
+  document.querySelectorAll('[data-L]').forEach(x => x.classList.toggle('on', x === c));
+  LAYER = c.dataset.L; $('#q').value = ''; drawList(); });
 
 let qt;
 $('#q').oninput = e => { clearTimeout(qt); const v = e.target.value.trim();
@@ -459,15 +489,18 @@ async function drawIngest() {
     w.innerHTML = '<b>LLM 키가 없어 인제스트를 실행할 수 없다.</b><br>' +
       '1. <a href="' + (L.signup || '#') + '" target="_blank">' + (L.signup || '') +
       '</a> 에서 키를 발급받는다<br>' +
-      '2. 터미널에서 <code>setx ' + (L.env || '') + ' "sk-..."</code><br>' +
-      '3. <b>터미널과 서버를 다시 켠다</b> (환경변수는 새 프로세스부터 보인다)' +
-      '<br><br>현재 설정 &mdash; 제공자 <code>' + (L.config ? L.config.provider : '') +
-      '</code> · 모델 <code>' + (L.config ? L.config.model : '') + '</code>';
+      '2. <code>' + (L.env_path || '.env') + '</code> 를 열어 ' +
+      '<code>' + (L.env || '') + '=</code> 뒤에 붙여넣는다<br>' +
+      '3. 이 화면을 새로고침한다 (서버는 안 껐다 켜도 된다)' +
+      '<br><br>같은 파일에서 <code>LLM_PROVIDER</code>와 <code>LLM_MODEL</code>도 바꾼다.' +
+      '<br>현재 &mdash; <code>' + (L.config ? L.config.provider : '') +
+      '</code> · <code>' + (L.config ? L.config.model : '') + '</code>';
     b.appendChild(w);
   } else {
     const w = el('div', 'box');
     w.innerHTML = '<h2>LLM</h2><div class="muted">' + L.provider + ' · <b>' +
-      L.model + '</b> · 키 ' + L.key_tail + '</div>';
+      L.model + '</b> · 키 ' + L.key_tail + ' (' + L.from + ')</div>' +
+      '<div class="note">제공자·모델·키는 <code>' + L.env_path + '</code> 에서 바꾼다.</div>';
     b.appendChild(w);
   }
   const pd = $('#pend');

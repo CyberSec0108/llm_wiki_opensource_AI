@@ -309,11 +309,35 @@ def render_md(body):
 
 
 def find_page(name):
+    """이름 하나로 파일을 찾는다. raw/ 도 본다 — 원본을 읽어야
+    위키의 서술이 어디서 왔는지 확인할 수 있기 때문이다."""
+    if name.endswith('.md') and os.path.exists(os.path.join(ROOT, name)):
+        return os.path.join(ROOT, name)          # 경로로 직접 지정한 경우
     for d in ('wiki', 'context', 'docs', 'wiki/_archive', ''):
-        p = os.path.join(ROOT, d, name + '.md')
-        if os.path.exists(p):
-            return p
+        q = os.path.join(ROOT, d, name + '.md')
+        if os.path.exists(q):
+            return q
+    for q in glob.glob(os.path.join(ROOT, 'raw', '*', name + '.md')):
+        return q
     return None
+
+
+@app.get('/api/browse')
+def api_browse():
+    """뷰어 왼쪽 목록. 위키와 원본을 같은 모양으로 돌려준다.
+
+    원본은 `raw/CLAUDE.md`에 따라 불변이므로 읽기만 한다.
+    """
+    out = []
+    for r in wiki_pages():
+        out.append({'name': r['name'], 'layer': 'wiki', 'axis': r.get('axis', ''),
+                    'status': r.get('status', ''), 'sub': r.get('description', '')})
+    for r in raw_files():
+        out.append({'name': os.path.basename(r['path'])[:-3], 'layer': 'raw',
+                    'axis': r.get('axis', ''),
+                    'status': 'ingested' if r.get('ingested') else '미인제스트',
+                    'sub': r['path'], 'path': r['path']})
+    return out
 
 
 @app.get('/api/page')
@@ -321,6 +345,7 @@ def api_page(name: str):
     p = find_page(name)
     if not p:
         return JSONResponse({'ok': False, 'error': '없는 페이지: ' + name}, 404)
+    rel = os.path.relpath(p, ROOT).replace(chr(92), '/')
     text = rd(p)
     fm, body = fm_of(text), text[len(fm_of(text)):]
     meta = dict(re.findall(r'^([a-z_]+):\s*(.*)$', fm, re.M))
@@ -332,8 +357,23 @@ def api_page(name: str):
             continue
         if re.search(r'\[\[' + re.escape(name) + r'[\]|#]', rd(q)):
             back.append(b)
-    return {'ok': True, 'name': name,
-            'path': os.path.relpath(p, ROOT).replace(chr(92), '/'),
+    # 원본은 위키링크가 아니라 출처 마커 ^[raw/...] 로 인용된다.
+    # 그것도 백링크로 쳐야 "이 자료를 근거로 쓴 페이지"를 볼 수 있다.
+    if rel.startswith('raw/'):
+        # 기사는 경로로, 논문·책은 cite_key로 인용된다. 둘 다 본다
+        keys = [rel]
+        m = re.search(r'^cite_key:\s*(.+)$', fm, re.M)
+        if m:
+            keys.append(m.group(1).strip())
+        for q in glob.glob(os.path.join(ROOT, 'wiki', '*.md')):
+            b = os.path.basename(q)[:-3]
+            if b in back or b in ('log', 'index', 'review', 'CLAUDE'):
+                continue
+            t = rd(q)
+            if any(k in t for k in keys):
+                back.append(b)
+    return {'ok': True, 'name': name, 'layer': rel.split('/')[0],
+            'path': rel,
             'meta': meta, 'html': render_md(body),
             'outlinks': [x.strip() for x in out], 'backlinks': sorted(back),
             'vault': os.path.basename(ROOT)}
