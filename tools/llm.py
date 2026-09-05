@@ -21,6 +21,7 @@ DEFAULT = {
     'LLM_MODEL': 'anthropic/claude-sonnet-4.5',
     'LLM_MAX_TOKENS': '8000',
     'LLM_TEMPERATURE': '0',
+    'LLM_TIMEOUT': '300',
 }
 
 # 제공자별로 필요한 것. 키 이름을 코드 여기저기 흩지 않는다.
@@ -121,6 +122,7 @@ def load_config():
         'model': get('LLM_MODEL'),
         'max_tokens': int(get('LLM_MAX_TOKENS') or 8000),
         'temperature': float(get('LLM_TEMPERATURE') or 0),
+        'timeout': float(get('LLM_TIMEOUT') or 300),
     }
 
 
@@ -176,7 +178,7 @@ def status():
                 key_tail='...' + key[-4:])
 
 
-def chat(system, user, max_tokens=None, cache_system=True, want_json=False):
+def chat(system, user, max_tokens=None, cache_system=True, schema=None):
     """한 번 호출하고 텍스트를 돌려준다.
 
     `system`에는 규칙 문서가 통째로 들어간다 — 매 호출 같은 내용이므로
@@ -192,7 +194,7 @@ def chat(system, user, max_tokens=None, cache_system=True, want_json=False):
 
     if p['sdk'] == 'anthropic':
         import anthropic
-        cl = anthropic.Anthropic(api_key=key)
+        cl = anthropic.Anthropic(api_key=key, timeout=c['timeout'])
         sys_blocks = [{'type': 'text', 'text': system}]
         if cache_system:
             sys_blocks[0]['cache_control'] = {'type': 'ephemeral'}
@@ -208,7 +210,8 @@ def chat(system, user, max_tokens=None, cache_system=True, want_json=False):
 
     # OpenRouter — OpenAI 호환 스펙
     from openai import OpenAI
-    cl = OpenAI(base_url=p['base_url'], api_key=key)
+    cl = OpenAI(base_url=p['base_url'], api_key=key,
+                timeout=c['timeout'], max_retries=1)
     kw = dict(
         model=c['model'], max_tokens=mt, temperature=c['temperature'],
         messages=[{'role': 'system', 'content': system},
@@ -218,11 +221,24 @@ def chat(system, user, max_tokens=None, cache_system=True, want_json=False):
     )
     # JSON 강제. 이게 걸리면 형식 위반이 사라져서 싼 모델도 쓸 만해진다.
     # 지원하지 않는 모델이 있으므로 실패하면 그냥 다시 부른다.
-    if want_json:
+    # 스키마를 주면 형식이 강제된다. `json_object` 모드는 쓰지 않는다 —
+    # 실측에서 glm-5.3-flash 가 그 모드에서 JSON 대신 산문을 뱉었다.
+    if schema:
+        sk = dict(kw, response_format={
+            'type': 'json_schema',
+            'json_schema': {'name': 'result', 'strict': True, 'schema': schema},
+        })
         try:
-            return _openai_call(cl, dict(kw, response_format={'type': 'json_object'}))
-        except Exception:                            # noqa: BLE001
-            pass
+            return _openai_call(cl, sk)
+        except Exception as e:                       # noqa: BLE001
+            code = getattr(getattr(e, 'response', None), 'status_code', None)
+            # 인증·한도·잔액은 재시도해도 같다. 요금만 두 번 나간다
+            if code in (401, 402, 403, 429) or (code and code >= 500):
+                raise
+            # 일시적 실패면 스키마를 유지한 채 한 번 더. 맨몸으로 내려가지 않는다 —
+            # 스키마 없는 호출은 YAML이나 빈 응답을 내놓고, 그게 조용히 흘러가서
+            # 실제로 "제공된 텍스트가 없습니다" 같은 가짜 분석 결과를 만들어냈다.
+            return _openai_call(cl, sk)
     return _openai_call(cl, kw)
 
 
@@ -236,23 +252,74 @@ def _openai_call(cl, kw):
     }
 
 
-def chat_json(system, user, max_tokens=None):
-    """JSON을 기대하는 호출. 코드블록 울타리를 벗겨준다.
+def ping():
+    """키가 실제로 통하는지 최소 비용으로 확인한다.
 
-    모델이 ```json 으로 감싸는 일이 잦다. 파이프라인이 매번 처리하지 않도록
-    여기서 한 번만 벗긴다.
+    `status()`는 키가 **있는지**만 본다 — 만료·잔액부족·오타는 못 잡는다.
+    실제로 한 번 불러봐야 알 수 있고, 그걸 파이프라인 중간에 알면 늦다.
     """
-    text, usage = chat(system, user, max_tokens, want_json=True)
-    t = text.strip()
+    try:
+        text, u = chat('Reply with OK.', 'ping', max_tokens=5, cache_system=False)
+        return {'ok': True, 'reply': (text or '').strip()[:40], 'usage': u,
+                'model': load_config()['model']}
+    except Exception as e:                           # noqa: BLE001
+        msg = str(e)
+        code = getattr(getattr(e, 'response', None), 'status_code', None)
+        hint = {401: '키가 만료됐거나 잘못됐다. 새로 발급받아라',
+                402: '잔액이 부족하다. 크레딧을 채워라',
+                403: '이 모델에 접근 권한이 없다',
+                404: '모델 이름이 틀렸다',
+                429: '요청 한도를 넘었다. 잠시 뒤 다시'}.get(code, '')
+        return {'ok': False, 'code': code, 'why': hint or msg[:300],
+                'detail': msg[:500], 'model': load_config()['model'],
+                'signup': PROVIDERS[get('LLM_PROVIDER')]['signup']}
+
+
+def _unfence(text):
+    """```json 울타리와 앞뒤 잡담을 벗긴다."""
+    t = (text or '').strip()
     if t.startswith('```'):
         t = t.split('\n', 1)[1] if '\n' in t else t
         if t.rstrip().endswith('```'):
             t = t.rstrip()[:-3]
     t = t.strip()
-    # 앞뒤 잡담을 흘리는 모델 대비 — 첫 { 부터 마지막 } 까지
     if not t.startswith('{') and '{' in t:
         t = t[t.find('{'):t.rfind('}') + 1]
-    return json.loads(t), usage
+    return t
+
+
+LAST_RAW = {'text': ''}   # 파싱이 깨졌을 때 무엇이 왔는지 보려고 남긴다
+
+
+def chat_json(system, user, max_tokens=None, schema=None):
+    """JSON을 기대하는 호출.
+
+    싼 모델일수록 형식을 흘린다. 세 겹으로 막는다.
+      1. 스키마를 주면 모델이 형식을 어길 수 없다
+      2. 울타리·잡담을 벗긴다
+      3. 그래도 깨지면 **받은 텍스트를 되돌려주며 JSON만 다시 달라고 한다**
+    """
+    text, usage = chat(system, user, max_tokens, schema=schema)
+    LAST_RAW['text'] = text
+    if not (text or '').strip():
+        raise RuntimeError(
+            '모델이 빈 응답을 돌려줬다. max_tokens 를 늘리거나 모델을 바꿔라 — '
+            '추론 모델은 추론 토큰이 max_tokens 를 먹는다.')
+    try:
+        return json.loads(_unfence(text)), usage
+    except ValueError:
+        pass
+    # 복구 — 앞선 답을 그대로 보여주고 JSON만 뽑아 달라고 한다
+    fix, u2 = chat(
+        'JSON만 출력한다. 설명·인사·코드블록 울타리를 붙이지 않는다.',
+        '아래 텍스트에서 JSON 객체만 그대로 뽑아 출력하라. 내용을 바꾸지 마라.\n\n'
+        + (text or '')[:60000],
+        max_tokens, cache_system=False, schema=schema)
+    LAST_RAW['text'] = fix
+    if not (fix or '').strip():
+        raise RuntimeError('복구 시도도 빈 응답이다. 원문: ' + (text or '')[:200])
+    usage = {k: usage.get(k, 0) + u2.get(k, 0) for k in set(usage) | set(u2)}
+    return json.loads(_unfence(fix)), usage
 
 
 if __name__ == '__main__':
@@ -264,6 +331,9 @@ if __name__ == '__main__':
     if ensure_env():
         print('설정 파일을 만들었다: ' + ENV)
         print('열어서 키를 채워라.')
+    if len(sys.argv) > 1 and sys.argv[1] == 'test':
+        print(json.dumps(ping(), ensure_ascii=False, indent=2))
+        sys.exit(0 if ping()['ok'] else 1)
     if len(sys.argv) > 1 and sys.argv[1] == 'set':
         # python tools/llm.py set provider=openrouter model=openai/gpt-4o
         kw = dict(a.split('=', 1) for a in sys.argv[2:] if '=' in a)

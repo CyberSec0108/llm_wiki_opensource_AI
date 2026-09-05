@@ -416,6 +416,13 @@ def api_llm_set(provider: str = Form(None), model: str = Form(None)):
     return llm.status()
 
 
+@app.post('/api/llm/test')
+def api_llm_test():
+    """키가 실제로 통하는지 확인한다. status()는 키가 있는지만 본다 —
+    만료·잔액부족·오타는 실제로 불러봐야 안다."""
+    return llm.ping()
+
+
 @app.get('/api/ingest')
 def api_ingest_list():
     return {'pending': ingest.pending(), 'llm': llm.status(),

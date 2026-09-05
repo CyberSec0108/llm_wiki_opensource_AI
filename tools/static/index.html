@@ -513,10 +513,22 @@ async function drawIngest() {
     b.appendChild(w);
   } else {
     const w = el('div', 'box');
-    w.innerHTML = '<h2>LLM</h2><div class="muted">' + L.provider + ' · <b>' +
-      L.model + '</b> · 키 ' + L.key_tail + ' (' + L.from + ')</div>' +
+    w.innerHTML = '<h2>LLM</h2><div style="display:flex;align-items:center;gap:10px">' +
+      '<div class="grow muted">' + L.provider + ' · <b>' + L.model + '</b> · 키 ' +
+      L.key_tail + ' (' + L.from + ')</div>' +
+      '<button class="act" id="ptest">연결 시험</button></div>' +
+      '<div id="pres"></div>' +
       '<div class="note">제공자·모델·키는 <code>' + L.env_path + '</code> 에서 바꾼다.</div>';
     b.appendChild(w);
+    $('#ptest').onclick = async () => {
+      $('#pres').innerHTML = '<div class="muted" style="margin-top:8px">확인 중…</div>';
+      const r = await post('/llm/test');
+      $('#pres').innerHTML = r.ok
+        ? '<div class="muted" style="margin-top:8px">통과 · 입력 ' + r.usage.in +
+          ' 출력 ' + r.usage.out + ' 토큰</div>'
+        : '<div class="warnbox" style="margin-top:8px"><b>' + (r.code || '') + ' ' +
+          r.why + '</b><br><small>' + (r.detail || '').replace(/</g, '&lt;') + '</small></div>';
+    };
   }
   const pd = $('#pend');
   pd.innerHTML = '';

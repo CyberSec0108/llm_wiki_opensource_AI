@@ -42,6 +42,45 @@ RULES = [
 ACTIONS = ('페이지 생성', '자료 수집', '건너뛰기', '모순 판정', 'cite_key 확정')
 
 
+
+def _obj(props, req=None):
+    """strict 스키마는 additionalProperties:false 와 완전한 required 를 요구한다."""
+    return {'type': 'object', 'additionalProperties': False,
+            'properties': props, 'required': req or list(props)}
+
+
+def _arr(item):
+    return {'type': 'array', 'items': item}
+
+
+S = {'type': 'string'}
+B = {'type': 'boolean'}
+
+# 형식을 스키마로 강제한다. 프롬프트로만 부탁하면 싼 모델이 흘린다 —
+# 실측에서 glm-5.3-flash 가 JSON 대신 산문을 뱉었다.
+SCHEMA1 = _obj({
+    'summary': S,
+    'claims': _arr(_obj({'claim': S, 'evidence': S})),
+    'axis_check': _obj({'stated': S, 'judged': S, 'agrees': B, 'why': S}),
+    'topics': _arr(S),
+    'update_targets': _arr(_obj({'page': S, 'what': S})),
+    'new_page_candidates': _arr(_obj({
+        'name': S, 'refs': {'type': 'integer'}, 'bytes': {'type': 'integer'},
+        'passes': B, 'why': S})),
+    'conflicts': _arr(_obj({'page': S, 'existing': S, 'new': S})),
+})
+
+SCHEMA2 = _obj({
+    'edits': _arr(_obj({
+        'page': S, 'mode': {'type': 'string', 'enum': ['update', 'create']},
+        'content': S, 'why': S})),
+    'review': _arr(_obj({
+        'action': {'type': 'string', 'enum': list(ACTIONS)},
+        'subject': S, 'detail': S})),
+    'log': S,
+})
+
+
 def rd(p):
     with io.open(p, encoding='utf-8') as f:
         return f.read()
@@ -223,7 +262,13 @@ def run(rel, dry=False, plan_only=False, jid=None):
         return {'dry': True, 'jid': jid}
 
     progress(jid, stage='분석', step=2, of=4)
-    analysis, u1 = llm.chat_json(system, p1)
+    try:
+        analysis, u1 = llm.chat_json(system, p1, schema=SCHEMA1)
+    except (ValueError, RuntimeError) as e:
+        progress(jid, stage='실패', done=True,
+                 error='분석 응답이 JSON이 아니다: ' + str(e)[:200],
+                 raw=llm.LAST_RAW['text'][:4000])
+        raise
     progress(jid, analysis=analysis, usage_analyze=u1)
 
     # 갱신 대상 페이지 전문을 붙인다 — 없으면 모델이 기존 내용을 지운다
@@ -239,7 +284,13 @@ def run(rel, dry=False, plan_only=False, jid=None):
                   'analysis': json.dumps(analysis, ensure_ascii=False, indent=2),
                   'targets': targets, 'actions': ' / '.join(ACTIONS),
                   'marker': marker, 'today': today}
-    plan, u2 = llm.chat_json(system, p2, max_tokens=16000)
+    try:
+        plan, u2 = llm.chat_json(system, p2, max_tokens=32000, schema=SCHEMA2)
+    except (ValueError, RuntimeError) as e:
+        progress(jid, stage='실패', done=True,
+                 error='편집안 응답이 JSON이 아니다: ' + str(e)[:200],
+                 raw=llm.LAST_RAW['text'][:4000])
+        raise
     progress(jid, plan=plan, usage_write=u2)
 
     if plan_only:
