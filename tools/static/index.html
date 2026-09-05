@@ -19,6 +19,9 @@
          border-bottom:1px solid var(--line);background:var(--card);
          position:sticky;top:0;z-index:5}
   header h1{font-size:15px;margin:0;font-weight:650;letter-spacing:-.01em}
+  header a.pill{text-decoration:none;cursor:pointer}
+  header a.pill:hover{border-color:var(--acc);color:var(--acc)}
+  a.pill:hover{border-color:var(--acc);color:var(--acc)}
   nav{display:flex;gap:4px;margin-left:auto}
   nav button{border:1px solid transparent;background:none;color:var(--dim);
              padding:6px 13px;border-radius:7px;cursor:pointer;font-size:13px;font-family:inherit}
@@ -95,6 +98,8 @@
 <body>
 <header>
   <h1>LLM Wiki</h1>
+  <a id="obs" class="pill" href="#" title="Obsidian을 연다. 그래프는 좌측 사이드바의 그래프 아이콘">
+    Obsidian 열기</a>
   <nav>
     <button class="on" data-t="s">상태판</button>
     <button data-t="add">자료 넣기</button>
@@ -178,6 +183,9 @@
         <div class="list" id="plist"></div>
       </div>
       <div class="box" style="margin-top:0">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+          <a id="obsg" class="pill" href="#">Obsidian 그래프 보기</a>
+        </div>
         <div id="phead"></div>
         <div class="doc" id="pbody"><span class="muted">왼쪽에서 페이지를 고르세요</span></div>
       </div>
@@ -240,6 +248,11 @@ async function loadStatus() {
       el('span', '', tot2 && !c.E && !c.W ? '   구조 이상 없음' : ''));
   } else $('#lintsum').textContent = '아직 실행한 적 없음';
 
+  if (d.vault) {
+    const u = 'obsidian://open?vault=' + encodeURIComponent(d.vault);
+    $('#obs').href = u; $('#obsg').href = u;
+    $('#obsg').title = 'Obsidian이 열리면 좌측 사이드바의 그래프 아이콘을 누르세요';
+  }
   const q = await get('/queue');
   $('#queue').textContent = q.items.length ? q.items.length + '건 대기 중' : '비어 있음';
 }

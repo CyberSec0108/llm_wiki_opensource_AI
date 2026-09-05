@@ -114,6 +114,7 @@ def api_status():
         'axis': axis_count,
         'lint': {'date': lint['date'], 'counts': lint['counts']} if lint else None,
         'queue': len(queue_items()),
+        'vault': os.path.basename(ROOT),
     }
 
 
