@@ -12,6 +12,7 @@
 import io
 import json
 import os
+import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV = os.path.join(ROOT, '.env')
@@ -22,6 +23,11 @@ DEFAULT = {
     'LLM_MAX_TOKENS': '8000',
     'LLM_TEMPERATURE': '0',
     'LLM_TIMEOUT': '300',
+    # 추론 모델이 답을 쓰기 전에 얼마나 오래 생각할지. low 로 시작한다 —
+    # 실측에서 기본값은 첫 답변 토큰까지 47초를 썼다.
+    # low | medium | high | none(생각 끄기)
+    'LLM_REASONING': 'low',
+    'LLM_FIRST_TOKEN_TIMEOUT': '180',
 }
 
 # 제공자별로 필요한 것. 키 이름을 코드 여기저기 흩지 않는다.
@@ -123,7 +129,22 @@ def load_config():
         'max_tokens': int(get('LLM_MAX_TOKENS') or 8000),
         'temperature': float(get('LLM_TEMPERATURE') or 0),
         'timeout': float(get('LLM_TIMEOUT') or 300),
+        'reasoning': (get('LLM_REASONING') or 'low').strip().lower(),
     }
+
+
+def reasoning_body(c):
+    """OpenRouter 의 추론 조절 파라미터. 모르는 값이면 아무것도 안 보낸다.
+
+    `none` 이면 생각 자체를 끈다 — 가장 빠르지만 답변 품질이 떨어질 수 있다.
+    추론을 지원하지 않는 모델은 이 파라미터를 그냥 무시한다.
+    """
+    r = c.get('reasoning') or ''
+    if r in ('low', 'medium', 'high'):
+        return {'reasoning': {'effort': r}}
+    if r in ('none', 'off', 'exclude'):
+        return {'reasoning': {'exclude': True}}
+    return {}
 
 
 def save_config(**kw):
@@ -216,6 +237,7 @@ def chat(system, user, max_tokens=None, cache_system=True, schema=None):
         model=c['model'], max_tokens=mt, temperature=c['temperature'],
         messages=[{'role': 'system', 'content': system},
                   {'role': 'user', 'content': user}],
+        extra_body=reasoning_body(c),
         extra_headers={'HTTP-Referer': 'https://github.com/CyberSec0108/llm_wiki_opensource_AI',
                        'X-Title': 'LLM Wiki'},
     )
@@ -243,7 +265,7 @@ def chat(system, user, max_tokens=None, cache_system=True, schema=None):
 
 
 def chat_stream(system, user, max_tokens=None, on_delta=None, cancel=None,
-                cache_system=True):
+                cache_system=True, on_reasoning=None):
     """토큰 단위로 스트리밍한다. **스키마를 쓰지 않는다** — 순수 텍스트만.
 
     JSON 스키마와 스트리밍은 같이 못 쓴다. 완성되기 전 JSON은 파싱할 수 없어서
@@ -257,6 +279,7 @@ def chat_stream(system, user, max_tokens=None, on_delta=None, cancel=None,
     반환: (전체 텍스트, usage, 중단 여부)
     """
     on_delta = on_delta or (lambda d: None)
+    on_reasoning = on_reasoning or (lambda d: None)
     cancel = cancel or (lambda: False)
     c = load_config()
     p = PROVIDERS[c['provider']]
@@ -298,19 +321,40 @@ def chat_stream(system, user, max_tokens=None, on_delta=None, cancel=None,
         messages=[{'role': 'system', 'content': system},
                   {'role': 'user', 'content': user}],
         stream=True, stream_options={'include_usage': True},
+        extra_body=reasoning_body(c),
         extra_headers={'HTTP-Referer': 'https://github.com/CyberSec0108/llm_wiki_opensource_AI',
                        'X-Title': 'LLM Wiki'},
     )
     usage = {'in': 0, 'out': 0, 'cache_read': 0}
+    # 추론 모델은 답을 쓰기 전에 오래 "생각"만 한다 — 그동안 토큰이 하나도
+    # 안 온다. 실측에서 340초가 지나도록 첫 토큰이 없는데 SDK 타임아웃도
+    # 걸리지 않았다(스트리밍 응답은 연결이 열려 있는 한 read timeout 이
+    # 안 걸린다). 무한 대기를 막으려면 우리가 직접 시계를 봐야 한다.
+    first_wait = float(get('LLM_FIRST_TOKEN_TIMEOUT') or 180)
+    t0 = time.monotonic()
     try:
         for chunk in stream:
             if cancel():
                 cancelled = True
                 break
-            if chunk.choices and chunk.choices[0].delta.content:
-                d = chunk.choices[0].delta.content
-                parts.append(d)
-                on_delta(d)
+            if not parts and time.monotonic() - t0 > first_wait:
+                raise RuntimeError(
+                    '%d초 동안 첫 토큰이 오지 않았다. 모델이 생각만 하고 있다 — '
+                    '.env 의 LLM_MODEL 을 더 빠른 모델로 바꾸거나 '
+                    'LLM_FIRST_TOKEN_TIMEOUT 을 늘려라.' % first_wait)
+            if chunk.choices and chunk.choices[0].delta:
+                dl = chunk.choices[0].delta
+                # 추론 모델은 답을 쓰기 전 생각을 delta.reasoning 으로 흘려보낸다.
+                # 실측: glm-5.3-flash 는 첫 답변 토큰까지 47초 동안 청크 1,437개를
+                # 전부 reasoning 으로 보냈다. 이걸 버리면 화면이 47초간 멈춘 것처럼
+                # 보이므로, 그대로 넘겨서 "생각 중" 상자에 보여준다.
+                rz = getattr(dl, 'reasoning', None)
+                if rz:
+                    on_reasoning(rz)
+                if dl.content:
+                    d = dl.content
+                    parts.append(d)
+                    on_delta(d)
             if getattr(chunk, 'usage', None):
                 u = chunk.usage
                 usage = {'in': u.prompt_tokens, 'out': u.completion_tokens, 'cache_read': 0}

@@ -13,8 +13,8 @@
     python tools/server.py --port 8000
     python tools/server.py --lan            같은 와이파이의 다른 기기에서 접속
 """
-import io, os, re, sys, json, glob, shutil, sqlite3, tempfile, subprocess, datetime, threading, queue
-from fastapi import FastAPI, UploadFile, File, Form
+import io, os, re, sys, time, json, glob, shutil, sqlite3, tempfile, subprocess, datetime, threading, queue, asyncio
+from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -555,21 +555,36 @@ def api_query_start(q: str = Form(...), use_raw: bool = Form(False),
 
 
 @app.get('/api/query/events')
-def api_query_events(jid: str):
-    """SSE로 진행 단계·토큰·최종 결과를 흘려보낸다."""
+async def api_query_events(request: Request, jid: str):
+    """SSE로 진행 단계·토큰·최종 결과를 흘려보낸다.
+
+    **클라이언트가 떠나면 중단 버튼을 누른 것과 똑같이 처리한다.** 새로고침·탭
+    이동으로 연결이 끊겨도 서버가 모르고 계속 기다리면 두 가지가 잘못된다 —
+    (1) 아무도 안 보는데 LLM 호출이 끝까지 돌아 요금이 나간다,
+    (2) 결국 죽은 소켓에 쓰려다 `ConnectionResetError`가 콘솔에 찍힌다.
+    1초마다 `request.is_disconnected()`로 확인해서 두 문제를 한 번에 막는다.
+    """
     st = QSTREAMS.get(jid)
     if not st:
         return JSONResponse({'error': '없는 작업'}, status_code=404)
 
-    def gen():
+    async def gen():
+        t0 = time.monotonic()
         try:
             while True:
-                kind, data = st['q'].get(timeout=310)  # LLM_TIMEOUT(300)보다 여유
+                if await request.is_disconnected():
+                    st['cancel'].set()   # 떠난 것도 중단과 같다 — 과금을 멈춘다
+                    break
+                if time.monotonic() - t0 > 600:
+                    yield _sse('error', {'error': '응답 시간 초과'})
+                    break
+                try:
+                    kind, data = await asyncio.to_thread(st['q'].get, True, 1.0)
+                except queue.Empty:
+                    continue
                 yield _sse(kind, data)
                 if kind in ('done', 'error', 'cancelled'):
                     break
-        except queue.Empty:
-            yield _sse('error', {'error': '응답 시간 초과'})
         finally:
             QSTREAMS.pop(jid, None)
 

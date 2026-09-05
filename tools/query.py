@@ -339,6 +339,9 @@ def run_stream(q, use_raw=False, max_pages=4, on_event=None, cancel=None):
                                  'raws': raws, 'n': len(used)},
         max_tokens=16000,
         on_delta=lambda d: on_event('token', {'delta': d}),
+        # 모델의 생각도 그대로 흘려보낸다 — 첫 답변 토큰까지 수십 초가 걸려서,
+        # 아무것도 안 보여주면 화면이 멈춘 것처럼 보인다
+        on_reasoning=lambda d: on_event('reasoning', {'delta': d}),
         cancel=cancel)
 
     if cancelled:

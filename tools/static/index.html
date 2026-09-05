@@ -146,7 +146,7 @@
   .qmain{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100%;
     background:var(--card);border:1px solid var(--line);border-radius:11px;overflow:hidden}
   @media(max-width:820px){.qmain{height:auto;grid-template-rows:auto auto auto}}
-  .qexamples{padding:13px 15px 0}
+  .qexamples{margin:0 0 9px}
   #qout{min-height:0;overflow-y:auto;padding:13px 15px;display:flex;flex-direction:column}
   @media(max-width:820px){#qout{max-height:60vh}}
   .qcomposer{padding:12px 15px 14px;border-top:1px solid var(--line);
@@ -163,6 +163,54 @@
   .ans p{margin:8px 0}
   #qout>.box{flex:none}
   .src.hl{background:color-mix(in srgb,var(--acc) 12%,transparent);border-radius:6px}
+
+  /* 진행 인디케이터 — Sec_AI 의 세로 리스트 방식(가로 막대가 아니다).
+     동그란 마커가 pending → active(맥박) → done(초록) 으로 바뀐다. */
+  .gen{max-width:430px;border:1px solid var(--acc);border-radius:11px;
+    padding:13px 16px;margin-bottom:12px;background:var(--card);flex:none}
+  .gen-title{display:inline-block;font-weight:700;font-size:13px;
+    background:linear-gradient(90deg,var(--dim) 20%,var(--acc) 50%,var(--dim) 80%);
+    background-size:200% 100%;-webkit-background-clip:text;background-clip:text;
+    color:transparent;animation:gen-shimmer 2.2s linear infinite}
+  @keyframes gen-shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+  .gen ol{display:grid;gap:7px;margin:11px 0 0;padding:0;list-style:none}
+  .gen li{display:flex;align-items:center;gap:9px;color:var(--dim);font-size:12.5px}
+  .gen-dot{width:14px;height:14px;flex:0 0 auto;border:2px solid var(--line);
+    border-radius:50%}
+  .gen li[data-state="active"]{color:var(--acc);font-weight:700}
+  .gen li[data-state="active"] .gen-dot{border-color:var(--acc);background:var(--acc);
+    animation:gen-pulse 1.4s ease-out infinite}
+  .gen li[data-state="done"] .gen-dot{border-color:var(--a);background:var(--a);
+    box-shadow:inset 0 0 0 3px var(--card)}
+  @keyframes gen-pulse{
+    0%{box-shadow:0 0 0 0 rgba(37,99,235,.45)}
+    70%{box-shadow:0 0 0 7px rgba(37,99,235,0)}
+    100%{box-shadow:0 0 0 0 rgba(37,99,235,0)}}
+
+  /* 모델의 생각 — 첫 답변 토큰까지 수십 초가 걸려서, 그동안 이걸 보여준다.
+     답변이 시작되면 자동으로 접힌다. */
+  .think{border:1px solid var(--line);border-radius:11px;margin-bottom:12px;
+    background:var(--bg);flex:none;overflow:hidden}
+  .think summary{cursor:pointer;padding:10px 14px;font-size:12.5px;color:var(--dim);
+    list-style:none;display:flex;align-items:center;gap:8px}
+  .think summary::-webkit-details-marker{display:none}
+  .think summary::before{content:"▸";transition:transform .15s}
+  .think[open] summary::before{transform:rotate(90deg)}
+  .think-body{padding:0 14px 12px;font-size:12px;line-height:1.65;color:var(--dim);
+    white-space:pre-wrap;max-height:230px;overflow-y:auto;
+    border-top:1px solid var(--line);margin-top:2px;padding-top:10px}
+
+  /* 출처 카드 — Sec_AI 의 chat-source-card 구조: [번호] 제목 / 메타 / 링크 */
+  .scard{padding:13px 0;border-bottom:1px solid var(--line)}
+  .scard:last-child{border-bottom:0}
+  .scard-head{display:flex;align-items:flex-start;gap:8px}
+  .scard-num{flex:0 0 auto;color:var(--acc);font-size:13px;font-weight:800}
+  .scard-head strong{min-width:0;font-size:13.5px;font-weight:650}
+  .scard p{margin:6px 0 0;color:var(--dim);font-size:12px}
+  .scard a{font-size:12px;font-weight:700;color:var(--acc);cursor:pointer;
+    text-decoration:none;display:inline-block;margin-top:5px}
+  .scard.hl{background:color-mix(in srgb,var(--acc) 10%,transparent);
+    border-radius:8px;padding-left:8px;padding-right:8px}
 </style>
 </head>
 <body>
@@ -298,11 +346,10 @@
       </aside>
 
       <div class="qmain">
-        <div class="chips qexamples" id="qexamples"></div>
-
         <div id="qout"></div>
 
         <form class="qcomposer" id="qform">
+          <div class="chips qexamples" id="qexamples"></div>
           <textarea id="qq" rows="2"
             placeholder="위키에게 물어본다 — 예: 프롬프트 인젝션을 어떻게 막나? (Shift+Enter로 줄바꿈)"></textarea>
           <div class="qcomposer-row">
@@ -625,21 +672,33 @@ function drawExamples() {
   });
 }
 
-function qSteps(stepIdx) {
+function qSteps(stepIdx, done) {
+  // Sec_AI 의 generation-indicator 방식 — 가로 막대가 아니라 세로 목록이고,
+  // 마커가 pending → active(맥박) → done(초록)으로 바뀐다.
   const STEPS = ['질문 확인', '위키 후보 찾기', '답변 작성'];
   let wrap = document.getElementById('qsteps');
   if (!wrap) {
-    wrap = el('div', 'box qsteps-wrap'); wrap.id = 'qsteps';
-    wrap.appendChild(el('div', 'steps'));
+    wrap = el('div', 'gen'); wrap.id = 'qsteps';
+    wrap.setAttribute('role', 'status');
+    wrap.appendChild(el('strong', 'gen-title', '답변을 준비하고 있습니다'));
+    wrap.appendChild(document.createElement('ol'));
     $('#qout').appendChild(wrap);
   }
-  const sv = wrap.querySelector('.steps'); sv.innerHTML = '';
+  const ol = wrap.querySelector('ol'); ol.innerHTML = '';
   STEPS.forEach((n, i) => {
-    const e = el('div', '', (i + 1) + '. ' + n);
-    if (i < stepIdx) e.className = 'ok';
-    else if (i === stepIdx) e.className = 'on';
-    sv.appendChild(e);
+    const li = document.createElement('li');
+    li.dataset.state = done ? 'done'
+      : i < stepIdx ? 'done' : i === stepIdx ? 'active' : 'pending';
+    li.appendChild(el('span', 'gen-dot'));
+    li.appendChild(el('span', '', n));
+    ol.appendChild(li);
   });
+  if (done) wrap.querySelector('.gen-title').textContent = '답변과 근거를 정리했습니다';
+}
+
+function qStepsDone() {
+  const w = document.getElementById('qsteps');
+  if (w) qSteps(2, true);
 }
 
 function qAnswerBox() {
@@ -652,7 +711,52 @@ function qAnswerBox() {
   return box.firstChild;
 }
 
-let qRenderer = null;
+let qRenderer = null, qThinkTimer = null, qThinkT0 = 0, qThinkFolded = false;
+
+function qThinkBox() {
+  // 첫 답변 토큰까지 실측 47초가 걸린다(그동안 모델은 계속 "생각"만 한다).
+  // 그 생각을 실시간으로 보여주고, 답변이 시작되면 자동으로 접는다.
+  let d = document.getElementById('qthink');
+  if (!d) {
+    d = document.createElement('details');
+    d.className = 'think'; d.id = 'qthink'; d.open = true;
+    const sm = document.createElement('summary');
+    sm.id = 'qthink-sum'; sm.textContent = '모델이 생각하는 중…';
+    const body = el('div', 'think-body'); body.id = 'qthink-body';
+    d.appendChild(sm); d.appendChild(body);
+    $('#qout').appendChild(d);
+    qThinkT0 = Date.now();
+    qThinkTimer = setInterval(() => {
+      const x = document.getElementById('qthink-sum');
+      if (x && !qThinkFolded)
+        x.textContent = '모델이 생각하는 중… ' +
+          Math.round((Date.now() - qThinkT0) / 1000) + '초';
+    }, 1000);
+  }
+  return document.getElementById('qthink-body');
+}
+
+function qThinkAppend(delta) {
+  const b = qThinkBox();
+  b.textContent += delta;
+  b.scrollTop = b.scrollHeight;
+}
+
+function qThinkFold() {
+  // 답변이 시작되면 접는다 — 지우지는 않는다. 왜 오래 걸렸는지 볼 수 있어야 한다.
+  if (qThinkTimer) { clearInterval(qThinkTimer); qThinkTimer = null; }
+  const d = document.getElementById('qthink');
+  if (!d || qThinkFolded) return;
+  qThinkFolded = true;
+  d.open = false;
+  const sec = Math.round((Date.now() - qThinkT0) / 1000);
+  const sm = document.getElementById('qthink-sum');
+  if (sm) sm.textContent = '모델의 생각 ' + sec + '초 (눌러서 보기)';
+}
+
+function qThinkStop() {
+  if (qThinkTimer) { clearInterval(qThinkTimer); qThinkTimer = null; }
+}
 
 async function startQuery() {
   const v = $('#qq').value.trim();
@@ -672,7 +776,7 @@ async function startQuery() {
   } catch (e) { r = { error: String(e) }; }
   if (r.error) { qDone(); showQError(r.error); return; }
   qJID = r.jid;
-  qRenderer = null; qCiteMap = {}; qAllowedIds = [];
+  qRenderer = null; qCiteMap = {}; qAllowedIds = []; qThinkFolded = false;
   qES = new EventSource('/api/query/events?jid=' + encodeURIComponent(qJID));
   qES.addEventListener('stage', e => {
     const d = JSON.parse(e.data);
@@ -694,7 +798,11 @@ async function startQuery() {
       b.appendChild(row);
     });
   });
+  qES.addEventListener('reasoning', e => {
+    qThinkAppend(JSON.parse(e.data).delta || '');
+  });
   qES.addEventListener('token', e => {
+    qThinkFold();
     const d = JSON.parse(e.data);
     const target = qAnswerBox();
     if (!qRenderer) {
@@ -719,6 +827,7 @@ async function startQuery() {
 }
 
 function qDone() {
+  qThinkStop();
   if (qES) { qES.close(); qES = null; }
   $('#qgo').disabled = false; $('#qstop').hidden = true;
   qJID = null;
@@ -745,13 +854,15 @@ function onCite(citationId) {
   const n = (citationId.match(/\d+/) || [])[0];
   const row = qCiteMap[n];
   if (!row) return;
-  document.querySelectorAll('.src.hl').forEach(x => x.classList.remove('hl'));
+  document.querySelectorAll('.src.hl,.scard.hl').forEach(x => x.classList.remove('hl'));
   row.classList.add('hl');
   row.scrollIntoView({ behavior: 'smooth', block: 'center' });
   setTimeout(() => row.classList.remove('hl'), 1800);
 }
 
 function finishAnswer(r) {
+  qThinkFold();
+  qStepsDone();
   // 스트리밍 중에는 그때까지 알던 순번(qAllowedIds)으로만 인용을 인식했다.
   // 다 끝났으니 실제로 인용된 번호(r.sources)로 최종 렌더를 한 번 더 해서
   // 확정한다 — 스트리밍 도중 놓친 경계 케이스가 있어도 여기서 바로잡힌다.
@@ -775,18 +886,23 @@ function finishAnswer(r) {
   }
   if ((r.sources || []).length) {
     const b = el('div', 'box');
-    b.innerHTML = '<h2>근거 ' + r.sources.length + '개</h2>';
+    b.innerHTML = '<h2>답변 근거 ' + r.sources.length + '개</h2>';
     r.sources.forEach(s => {
-      const e = el('div', 'src'); e.dataset.n = s.ordinal;
-      e.innerHTML = '<span class="pill">[' + s.ordinal + ']</span>' +
-        '<span class="st st-' + s.level + '">' + s.status + '</span>' +
-        '<a class="grow" data-p="' + s.page + '">' + s.page + '</a>' +
-        '<span class="muted">' + (STLABEL[s.level] || '') +
-        (s.needs_source ? ' · 보강필요' : '') + '</span>';
-      e.querySelector('a').onclick = () => {
-        document.querySelector('[data-t=wiki]').click(); openPage(s.page); };
-      qCiteMap[s.ordinal] = e;
-      b.appendChild(e);
+      // Sec_AI 의 chat-source-card 구조: [번호] 제목 / 메타 한 줄 / 열기 링크
+      const card = el('div', 'scard'); card.dataset.n = s.ordinal;
+      const head = el('div', 'scard-head');
+      head.appendChild(el('span', 'scard-num', '[' + s.ordinal + ']'));
+      head.appendChild(el('strong', '', s.page));
+      card.appendChild(head);
+      const meta = [s.status, STLABEL[s.level] || ''];
+      if (s.needs_source) meta.push('보강 필요');
+      if (s.derived) meta.push('파생 페이지');
+      card.appendChild(el('p', '', meta.filter(Boolean).join(' · ')));
+      const a = el('a', '', '위키에서 열기 →');
+      a.onclick = () => { document.querySelector('[data-t=wiki]').click(); openPage(s.page); };
+      card.appendChild(a);
+      qCiteMap[s.ordinal] = card;
+      b.appendChild(card);
     });
     if ((r.ghost_citations || []).length)
       b.innerHTML += '<div class="warnbox" style="margin-top:9px">' +
