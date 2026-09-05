@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Wiki</title>
+<style>
+  :root{
+    --bg:#f7f7f5; --card:#fff; --line:#e3e3df; --ink:#1f1f1d; --dim:#6b6b66;
+    --a:#2d7d46; --b:#7b4fa8; --warn:#b26a00; --err:#c0392b; --acc:#2563eb;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#1a1a18;--card:#232320;--line:#38382f;--ink:#eceae4;--dim:#9a978e;}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.6 -apple-system,"Segoe UI","Malgun Gothic",sans-serif}
+  header{display:flex;align-items:center;gap:16px;padding:14px 22px;
+         border-bottom:1px solid var(--line);background:var(--card);
+         position:sticky;top:0;z-index:5}
+  header h1{font-size:15px;margin:0;font-weight:650;letter-spacing:-.01em}
+  nav{display:flex;gap:4px;margin-left:auto}
+  nav button{border:1px solid transparent;background:none;color:var(--dim);
+             padding:6px 13px;border-radius:7px;cursor:pointer;font-size:13px;font-family:inherit}
+  nav button.on{background:var(--bg);color:var(--ink);border-color:var(--line);font-weight:600}
+  main{max-width:1000px;margin:0 auto;padding:22px}
+  section{display:none} section.on{display:block}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:10px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:11px;
+        padding:15px 16px;text-align:center}
+  .stat b{display:block;font-size:27px;font-weight:660;letter-spacing:-.02em}
+  .stat span{font-size:12px;color:var(--dim)}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:11px;
+       padding:17px 19px;margin-top:16px}
+  .box h2{font-size:13px;margin:0 0 13px;color:var(--dim);font-weight:600;
+          text-transform:uppercase;letter-spacing:.05em}
+  .bar{height:9px;border-radius:5px;background:var(--line);overflow:hidden;display:flex}
+  .bar i{display:block}
+  .row{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid var(--line)}
+  .row:first-of-type{border-top:none}
+  .pill{font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);
+        color:var(--dim);white-space:nowrap}
+  .pill.a{color:var(--a);border-color:var(--a)} .pill.b{color:var(--b);border-color:var(--b)}
+  .grow{flex:1;min-width:0}
+  .grow small{display:block;color:var(--dim);font-size:12px;
+              overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  button.act{border:1px solid var(--line);background:var(--card);color:var(--ink);
+             padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;font-family:inherit}
+  button.act:hover{border-color:var(--acc);color:var(--acc)}
+  button.pri{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+  label{display:block;font-size:12px;color:var(--dim);margin:11px 0 4px}
+  input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);
+    border-radius:7px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+  textarea{min-height:62px;resize:vertical}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .chip{font-size:12px;padding:3px 9px;border-radius:20px;border:1px solid var(--line);
+        cursor:pointer;background:var(--card)}
+  .chip.on{border-color:var(--acc);color:var(--acc);font-weight:600}
+  .sev{font-weight:700;min-width:22px;text-align:center}
+  .E{color:var(--err)} .W{color:var(--warn)} .I{color:var(--dim)}
+  .muted{color:var(--dim);font-size:12.5px}
+  .ok{color:var(--a);font-weight:600}
+  code{background:var(--bg);padding:1px 5px;border-radius:4px;font-size:12px}
+  .note{font-size:12.5px;color:var(--dim);border-left:2px solid var(--line);
+        padding-left:11px;margin:10px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>LLM Wiki</h1>
+  <nav>
+    <button class="on" data-t="s">상태판</button>
+    <button data-t="add">자료 넣기</button>
+    <button data-t="lint">점검</button>
+  </nav>
+</header>
+
+<main>
+  <!-- 상태판 -->
+  <section id="s" class="on">
+    <div class="cards" id="stats"></div>
+    <div class="box"><h2>연구 축</h2><div class="bar" id="axisbar"></div>
+      <div class="chips" id="axislbl" style="margin-top:9px"></div></div>
+    <div class="box"><h2>마지막 점검</h2><div id="lintsum" class="muted">불러오는 중…</div></div>
+    <div class="box"><h2>다음에 만들 페이지</h2><div id="stubs"></div>
+      <div class="note">참조 횟수만 센 것이다. <b>원본 근거 1,200B와 사례 유무</b>는
+        <code>/lint</code>에서 확인한다.</div></div>
+    <div class="box"><h2>인제스트 대기열</h2><div id="queue" class="muted"></div>
+      <div class="note">웹 UI가 접수하고 <code>/ingest</code>가 처리한다.</div></div>
+  </section>
+
+  <!-- 자료 넣기 -->
+  <section id="add">
+    <div class="box">
+      <h2>Zotero에서 가져오기</h2>
+      <div id="zot" class="muted">불러오는 중…</div>
+    </div>
+    <div class="box">
+      <h2>정본 만들기</h2>
+      <div class="two">
+        <div><label>종류</label>
+          <select id="f_kind">
+            <option value="paper">논문</option><option value="article">아티클</option>
+            <option value="book">책</option><option value="video">영상</option>
+            <option value="writeup">라이트업</option><option value="note">직접 작성</option>
+          </select></div>
+        <div><label>축 *</label>
+          <select id="f_axis">
+            <option value="ai-for-security">AI활용 — AI로 보안을</option>
+            <option value="securing-ai">AI보호 — AI를 지킨다</option>
+            <option value="both">공통 — 두 축 모두</option>
+            <option value="">기타 — 축 밖</option>
+          </select></div>
+      </div>
+      <label>제목 *</label><input id="f_title">
+      <label>파일명 (비우면 제목 사용)</label><input id="f_filename">
+      <div class="two">
+        <div><label>저자 (세미콜론으로 구분)</label><input id="f_authors"></div>
+        <div><label>연도·날짜</label><input id="f_date"></div>
+      </div>
+      <div class="two">
+        <div><label>DOI</label><input id="f_doi"></div>
+        <div><label>인용키</label><input id="f_cite"></div>
+      </div>
+      <label>게재지</label><input id="f_venue">
+      <label>URL</label><input id="f_url">
+      <label>왜 담았나 * <span class="muted">— 6개월 뒤 이 줄이 없으면 왜 저장했는지 모른다</span></label>
+      <textarea id="f_why"></textarea>
+      <label>주제 태그 <span class="muted">— 기존 태그를 먼저 재사용한다</span></label>
+      <div class="chips" id="tagchips"></div>
+      <input id="f_topics" placeholder="주제/새-태그, 주제/또다른-태그" style="margin-top:7px">
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="act" onclick="save(0)">raw/ 에 저장</button>
+        <button class="act pri" onclick="save(1)">저장 + 인제스트 대기열</button>
+        <span id="saveMsg" class="muted" style="align-self:center"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 점검 -->
+  <section id="lint">
+    <div class="box">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="lintcnt" class="grow muted">불러오는 중…</div>
+        <button class="act pri" onclick="runLint()">지금 실행</button>
+      </div>
+    </div>
+    <div id="findings"></div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c;
+  if (x !== undefined) e.textContent = x; return e; };
+const get = p => fetch('/api' + p).then(r => r.json());
+const post = (p, d) => fetch('/api' + p, { method: 'POST',
+  body: new URLSearchParams(d || {}) }).then(r => r.json());
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === b.dataset.t));
+});
+
+const AX = { 'ai-for-security': ['AI활용', 'a'], 'securing-ai': ['AI보호', 'b'],
+             'both': ['공통', ''], 'none': ['기타', ''] };
+
+async function loadStatus() {
+  const d = await get('/status');
+  const cards = [['페이지', d.pages], ['원본', d.raw], ['미인제스트', d.pending],
+                 ['보강대기', d.needs_source], ['stable', d.stable], ['대기열', d.queue]];
+  $('#stats').innerHTML = '';
+  cards.forEach(([k, v]) => { const c = el('div', 'stat');
+    c.appendChild(el('b', '', v)); c.appendChild(el('span', '', k)); $('#stats').appendChild(c); });
+
+  const bar = $('#axisbar'), lbl = $('#axislbl'); bar.innerHTML = ''; lbl.innerHTML = '';
+  const tot = Object.values(d.axis).reduce((a, b) => a + b, 0) || 1;
+  Object.entries(d.axis).forEach(([k, v]) => {
+    const [nm, cl] = AX[k] || [k, ''];
+    const i = el('i'); i.style.width = (v / tot * 100) + '%';
+    i.style.background = cl === 'a' ? 'var(--a)' : cl === 'b' ? 'var(--b)' : 'var(--line)';
+    bar.appendChild(i);
+    lbl.appendChild(el('span', 'pill ' + cl, nm + ' ' + v));
+  });
+
+  $('#lintsum').innerHTML = '';
+  if (d.lint) {
+    const c = d.lint.counts, tot2 = (c.E || 0) + (c.W || 0) + (c.I || 0);
+    $('#lintsum').append(el('span', '', d.lint.date + '  ·  '),
+      el('span', 'sev E', 'Error ' + (c.E || 0)), el('span', '', '   '),
+      el('span', 'sev W', 'Warning ' + (c.W || 0)), el('span', '', '   '),
+      el('span', 'sev I', 'Info ' + (c.I || 0)),
+      el('span', '', tot2 && !c.E && !c.W ? '   구조 이상 없음' : ''));
+  } else $('#lintsum').textContent = '아직 실행한 적 없음';
+
+  const q = await get('/queue');
+  $('#queue').textContent = q.items.length ? q.items.length + '건 대기 중' : '비어 있음';
+}
+
+async function loadStubs() {
+  const d = await get('/lint');
+  const box = $('#stubs'); box.innerHTML = '';
+  (d.stubs || []).slice(0, 8).forEach(s => {
+    const r = el('div', 'row');
+    r.appendChild(el('span', 'pill', s.refs + '곳'));
+    const g = el('div', 'grow'); g.appendChild(el('div', '', s.name));
+    g.appendChild(el('small', '', s.from.join(' · '))); r.appendChild(g);
+    box.appendChild(r);
+  });
+  if (!box.children.length) box.innerHTML = '<div class="muted">없음</div>';
+}
+
+async function loadLint() {
+  const d = await get('/lint');
+  const c = d.counts || {};
+  $('#lintcnt').innerHTML = '';
+  $('#lintcnt').append(el('span', 'sev E', '● ' + (c.E || 0) + ' Error   '),
+    el('span', 'sev W', '● ' + (c.W || 0) + ' Warning   '),
+    el('span', 'sev I', '● ' + (c.I || 0) + ' Info'),
+    el('span', 'muted', d.date ? '   (' + d.date + ')' : ''));
+  const box = $('#findings'); box.innerHTML = '';
+  if (!(d.findings || []).length) {
+    box.innerHTML = '<div class="box"><span class="ok">발견된 문제가 없습니다.</span></div>';
+    return;
+  }
+  d.findings.forEach(f => {
+    const b = el('div', 'box'); b.style.padding = '13px 16px';
+    const top = el('div', 'row'); top.style.borderTop = 'none'; top.style.padding = '0';
+    top.appendChild(el('span', 'sev ' + f.severity, f.check));
+    const g = el('div', 'grow'); g.appendChild(el('div', '', f.what));
+    g.appendChild(el('small', '', f.where + '  →  ' + f.how)); top.appendChild(g);
+    const ig = el('button', 'act', '오탐');
+    ig.onclick = async () => { await post('/lint/ignore', { check: f.check, where: f.where });
+      loadLint(); loadStatus(); };
+    top.appendChild(ig); b.appendChild(top); box.appendChild(b);
+  });
+}
+
+async function runLint() {
+  $('#lintcnt').textContent = '실행 중…';
+  await post('/lint/run'); loadLint(); loadStatus(); loadStubs();
+}
+
+async function loadTags() {
+  const tags = await get('/tags'); const box = $('#tagchips'); box.innerHTML = '';
+  tags.forEach(t => { const c = el('span', 'chip', t.tag + ' (' + t.n + ')');
+    c.onclick = () => { c.classList.toggle('on');
+      const cur = $('#f_topics').value.split(',').map(x => x.trim()).filter(Boolean);
+      const i = cur.indexOf(t.tag); i < 0 ? cur.push(t.tag) : cur.splice(i, 1);
+      $('#f_topics').value = cur.join(', '); };
+    box.appendChild(c); });
+  if (!tags.length) box.innerHTML = '<span class="muted">아직 태그가 없습니다</span>';
+}
+
+async function loadZotero() {
+  const d = await get('/zotero'); const box = $('#zot'); box.innerHTML = '';
+  if (!d.ok) { box.textContent = d.error; return; }
+  d.items.forEach(it => {
+    const r = el('div', 'row');
+    r.appendChild(el('span', 'pill' + (it.in_vault ? '' : ' a'), it.in_vault ? '있음' : '신규'));
+    const g = el('div', 'grow'); g.appendChild(el('div', '', it.title));
+    g.appendChild(el('small', '', [it.authors[0], it.date, it.venue].filter(Boolean).join(' · ')));
+    r.appendChild(g);
+    if (!it.in_vault) { const b = el('button', 'act', '폼에 채우기');
+      b.onclick = () => { fill(it); document.querySelector('[data-t=add]').click();
+        window.scrollTo(0, 9999); }; r.appendChild(b); }
+    box.appendChild(r);
+  });
+  if (!d.items.length) box.textContent = 'Zotero 라이브러리가 비어 있습니다';
+}
+
+function fill(it) {
+  $('#f_kind').value = it.itemType === 'conferencePaper' || it.itemType === 'preprint'
+    || it.itemType === 'journalArticle' ? 'paper' : 'article';
+  $('#f_title').value = it.title; $('#f_authors').value = it.authors.join('; ');
+  $('#f_date').value = it.date; $('#f_doi').value = it.doi;
+  $('#f_cite').value = it.cite_key; $('#f_venue').value = it.venue; $('#f_url').value = it.url;
+  $('#f_filename').value = '';
+}
+
+async function save(q) {
+  const b = id => $('#f_' + id).value.trim();
+  if (!b('title') || !b('why')) { $('#saveMsg').textContent = '제목과 「왜 담았나」는 필수입니다'; return; }
+  const r = await post('/source', { kind: b('kind'), title: b('title'), why: b('why'),
+    axis: b('axis'), topics: b('topics'), authors: b('authors'), date: b('date'),
+    doi: b('doi'), url: b('url'), venue: b('venue'), cite_key: b('cite'),
+    filename: b('filename'), queue: q ? '1' : '' });
+  $('#saveMsg').textContent = r.ok
+    ? '저장됨: ' + r.path + (r.queued ? '  · 대기열 추가' : '') : (r.error || '실패');
+  if (r.ok) { ['title', 'why', 'authors', 'date', 'doi', 'cite', 'venue', 'url', 'topics', 'filename']
+    .forEach(k => $('#f_' + k).value = '');
+    document.querySelectorAll('.chip.on').forEach(c => c.classList.remove('on'));
+    loadStatus(); loadTags(); loadZotero(); }
+}
+
+loadStatus(); loadStubs(); loadLint(); loadTags(); loadZotero();
+</script>
+</body>
+</html>

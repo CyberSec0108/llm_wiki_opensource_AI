@@ -40,6 +40,8 @@ credentials.json
 # 4. 결과물 및 파생물 (Output)
 # ==========================================
 reports/
+lint-ignore.json
+queue.md
 graphify-out/
 .ua/
 Output/*

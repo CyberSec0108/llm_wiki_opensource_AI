@@ -10,7 +10,7 @@
     python tools/lint.py            결과를 reports/ 에 저장
     python tools/lint.py --stdout   화면에도 출력
 """
-import io, os, re, sys, glob, datetime
+import io, os, re, sys, json, glob, datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
@@ -231,6 +231,19 @@ for t, srcs in sorted(todo_ref.items(), key=lambda x: (-len(x[1]), x[0])):
 os.path.isdir('reports') or os.makedirs('reports')
 out = 'reports/lint-' + str(TODAY) + '.md'
 io.open(out, 'w', encoding='utf-8').write(NL.join(lines) + NL)
+
+# 웹 UI 등 다른 도구가 읽을 수 있게 JSON도 남긴다 (같은 검사 결과, 다른 형식)
+payload = {
+    'date': str(TODAY),
+    'counts': dict((s, len([r for r in res if r[0] == s])) for s in 'EWI'),
+    'findings': [{'severity': s, 'check': n, 'what': w,
+                  'where': p2.replace(chr(92), '/'), 'how': h}
+                 for s, n, w, p2, h in res],
+    'stubs': [{'name': t, 'refs': len(v), 'from': sorted(v)}
+              for t, v in sorted(todo_ref.items(), key=lambda x: (-len(x[1]), x[0]))],
+}
+io.open('reports/lint-' + str(TODAY) + '.json', 'w', encoding='utf-8').write(
+    json.dumps(payload, ensure_ascii=False, indent=2))
 
 summary = 'E=%d W=%d I=%d  ->  %s' % (
     len([r for r in res if r[0] == 'E']),
