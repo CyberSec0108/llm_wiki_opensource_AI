@@ -39,12 +39,18 @@
   header a.pill{text-decoration:none;cursor:pointer;border-color:#3d5a76;color:#c9dcec}
   header a.pill:hover{border-color:#fff;color:#fff}
   a.pill:hover{border-color:var(--acc);color:var(--acc)}
-  /* 메뉴는 참고 사이트들처럼 넓게 벌린다. 화면이 좁아지면 gap 이 먼저 줄어든다 */
-  nav{display:flex;align-items:center;gap:clamp(16px,2.6vw,42px);justify-self:center}
+  /* 메뉴는 참고 사이트들처럼 넓게 벌린다. 화면이 좁아지면 gap 이 먼저 줄어든다.
+     구분자 위치를 gap 의 절반으로 잡아야 해서 간격을 변수로 둔다 */
+  nav{display:flex;align-items:center;justify-self:center;
+      --navgap:clamp(22px,3.2vw,54px);gap:var(--navgap)}
   nav button{border:0;background:none;color:#cfe0ee;position:relative;
              padding:8px 2px;cursor:pointer;font-size:15.5px;
              font-family:inherit;font-weight:600;white-space:nowrap}
   nav button:hover{color:#fff}
+  /* 탭 사이 연한 / 구분자. 빈 간격 한가운데 놓는다 (첫 탭 앞에는 없다) */
+  nav button+button::before{content:'/';position:absolute;top:50%;
+    left:calc(var(--navgap) / -2);transform:translate(-50%,-50%);
+    color:#3d5a76;font-size:14px;font-weight:400;pointer-events:none}
   /* 현재 탭은 흰 알약 대신 밑줄 — 가운데 정렬 메뉴에서 덜 튄다 */
   nav button.on{color:#fff;font-weight:750}
   nav button.on::after{content:'';position:absolute;left:-2px;right:-2px;bottom:-1px;
@@ -58,7 +64,7 @@
     header{display:flex;flex-wrap:wrap;height:auto;gap:10px;padding:12px 16px}
     header h1{font-size:19px}
     .hdr-util{margin-left:auto}
-    nav{order:3;width:100%;justify-self:auto;gap:18px;
+    nav{order:3;width:100%;justify-self:auto;--navgap:20px;
         overflow-x:auto;padding-bottom:2px}
     nav button{font-size:14px}
   }
