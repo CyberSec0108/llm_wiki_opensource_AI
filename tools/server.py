@@ -20,6 +20,21 @@ from fastapi.staticfiles import StaticFiles
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NL = chr(10)
+
+# 윈도우의 ProactorEventLoop 는 클라이언트가 이미 끊은 소켓을 닫을 때
+# ConnectionResetError 를 콜백에서 그대로 던진다. 서버는 멀쩡한데 콘솔에만
+# 긴 traceback 이 찍힌다 — uvicorn on Windows 의 알려진 노이즈다.
+# 우리가 잡을 수 있는 지점이 아니라(asyncio 내부 콜백) 여기서 그 예외만 삼킨다.
+if sys.platform == 'win32':
+    from asyncio.proactor_events import _ProactorBasePipeTransport
+
+    def _quiet_connection_lost(self, exc, _orig=_ProactorBasePipeTransport._call_connection_lost):
+        try:
+            _orig(self, exc)
+        except (ConnectionResetError, ConnectionAbortedError):
+            pass
+
+    _ProactorBasePipeTransport._call_connection_lost = _quiet_connection_lost
 ZOTERO = os.path.join(os.path.expanduser('~'), 'Zotero')
 PREFIX_AXIS = {'ai-for-security': '(AI활용)', 'securing-ai': '(AI보호)',
                'both': '(공통)', '': '(기타)'}
