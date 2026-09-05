@@ -176,7 +176,7 @@ def status():
                 key_tail='...' + key[-4:])
 
 
-def chat(system, user, max_tokens=None, cache_system=True):
+def chat(system, user, max_tokens=None, cache_system=True, want_json=False):
     """한 번 호출하고 텍스트를 돌려준다.
 
     `system`에는 규칙 문서가 통째로 들어간다 — 매 호출 같은 내용이므로
@@ -209,13 +209,25 @@ def chat(system, user, max_tokens=None, cache_system=True):
     # OpenRouter — OpenAI 호환 스펙
     from openai import OpenAI
     cl = OpenAI(base_url=p['base_url'], api_key=key)
-    r = cl.chat.completions.create(
+    kw = dict(
         model=c['model'], max_tokens=mt, temperature=c['temperature'],
         messages=[{'role': 'system', 'content': system},
                   {'role': 'user', 'content': user}],
         extra_headers={'HTTP-Referer': 'https://github.com/CyberSec0108/llm_wiki_opensource_AI',
                        'X-Title': 'LLM Wiki'},
     )
+    # JSON 강제. 이게 걸리면 형식 위반이 사라져서 싼 모델도 쓸 만해진다.
+    # 지원하지 않는 모델이 있으므로 실패하면 그냥 다시 부른다.
+    if want_json:
+        try:
+            return _openai_call(cl, dict(kw, response_format={'type': 'json_object'}))
+        except Exception:                            # noqa: BLE001
+            pass
+    return _openai_call(cl, kw)
+
+
+def _openai_call(cl, kw):
+    r = cl.chat.completions.create(**kw)
     u = getattr(r, 'usage', None)
     return r.choices[0].message.content or '', {
         'in': getattr(u, 'prompt_tokens', 0) if u else 0,
@@ -230,7 +242,7 @@ def chat_json(system, user, max_tokens=None):
     모델이 ```json 으로 감싸는 일이 잦다. 파이프라인이 매번 처리하지 않도록
     여기서 한 번만 벗긴다.
     """
-    text, usage = chat(system, user, max_tokens)
+    text, usage = chat(system, user, max_tokens, want_json=True)
     t = text.strip()
     if t.startswith('```'):
         t = t.split('\n', 1)[1] if '\n' in t else t
