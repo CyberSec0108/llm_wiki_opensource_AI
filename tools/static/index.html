@@ -93,6 +93,18 @@
   .co-inference{border-left-color:var(--b)} .co-warning,.co-conflict{border-left-color:var(--warn)}
   .co-unverified{border-left-color:var(--err)} .co-note,.co-tip{border-left-color:var(--acc)}
   .co-important{border-left-color:var(--a)}
+  .steps{display:flex;gap:0;margin:14px 0}
+  .steps div{flex:1;text-align:center;font-size:11px;padding:7px 4px;
+    border-top:3px solid var(--line);color:var(--dim)}
+  .steps div.on{border-top-color:var(--acc);color:var(--acc);font-weight:650}
+  .steps div.ok{border-top-color:var(--a);color:var(--a)}
+  .warnbox{background:var(--card);border:1px solid var(--warn);border-radius:8px;
+    padding:13px 15px;font-size:12px;line-height:1.75}
+  .warnbox code{background:rgba(0,0,0,.09);padding:1px 5px;border-radius:3px}
+  .pend{display:flex;align-items:center;gap:10px;padding:9px 0;
+    border-bottom:1px solid var(--line)}
+  .pend:last-child{border-bottom:0}
+  .rv{padding:7px 0;border-bottom:1px solid var(--line);font-size:12px}
 </style>
 </head>
 <body>
@@ -104,6 +116,7 @@
     <button class="on" data-t="s">상태판</button>
     <button data-t="add">자료 넣기</button>
     <button data-t="wiki">위키</button>
+    <button data-t="ing">인제스트</button>
     <button data-t="lint">점검</button>
   </nav>
 </header>
@@ -190,6 +203,21 @@
         <div class="doc" id="pbody"><span class="muted">왼쪽에서 페이지를 고르세요</span></div>
       </div>
     </div>
+  </section>
+
+  <!-- 인제스트 -->
+  <section id="ing">
+    <div id="llmbox"></div>
+    <div class="box"><h2>대기 중인 자료</h2><div id="pend" class="muted">불러오는 중…</div>
+      <div class="note">터미널의 <code>/ingest</code>와 <b>같은 규칙</b>을 쓴다 —
+        <code>CLAUDE.md</code>와 <code>SKILL.md</code>를 읽어서 프롬프트로 넣는다.</div></div>
+    <div class="box" id="jobbox" style="display:none"><h2>진행</h2>
+      <div class="steps" id="steps"></div>
+      <div id="jobmsg" class="muted"></div>
+      <div id="jobout"></div></div>
+    <div class="box"><h2>리뷰 큐</h2><div id="review" class="muted"></div>
+      <div class="note">자동으로 넘기지 않은 <b>판단이 필요한 것들.</b>
+        인제스트를 막지 않는다 — 편할 때 처리하면 된다.</div></div>
   </section>
 
   <!-- 점검 -->
@@ -418,6 +446,106 @@ $('#q').oninput = e => { clearTimeout(qt); const v = e.target.value.trim();
     : drawList(), 250); };
 
 loadStatus(); loadStubs(); loadLint(); loadTags(); loadZotero(); loadWiki();
+/* ===== 인제스트 ===== */
+const STEPS = ['읽기', '분석', '작성', '마무리'];
+let poll = null;
+
+async function drawIngest() {
+  const d = await get('/ingest');
+  const L = d.llm, b = $('#llmbox');
+  b.innerHTML = '';
+  if (!L.ok) {
+    const w = el('div', 'warnbox');
+    w.innerHTML = '<b>LLM 키가 없어 인제스트를 실행할 수 없다.</b><br>' +
+      '1. <a href="' + (L.signup || '#') + '" target="_blank">' + (L.signup || '') +
+      '</a> 에서 키를 발급받는다<br>' +
+      '2. 터미널에서 <code>setx ' + (L.env || '') + ' "sk-..."</code><br>' +
+      '3. <b>터미널과 서버를 다시 켠다</b> (환경변수는 새 프로세스부터 보인다)' +
+      '<br><br>현재 설정 &mdash; 제공자 <code>' + (L.config ? L.config.provider : '') +
+      '</code> · 모델 <code>' + (L.config ? L.config.model : '') + '</code>';
+    b.appendChild(w);
+  } else {
+    const w = el('div', 'box');
+    w.innerHTML = '<h2>LLM</h2><div class="muted">' + L.provider + ' · <b>' +
+      L.model + '</b> · 키 ' + L.key_tail + '</div>';
+    b.appendChild(w);
+  }
+  const pd = $('#pend');
+  pd.innerHTML = '';
+  if (!d.pending.length) { pd.className = 'muted'; pd.textContent = '없음 — 전부 반영됐다.'; }
+  else {
+    pd.className = '';
+    d.pending.forEach(it => {
+      const r = el('div', 'pend');
+      const t = el('div', 'grow');
+      t.appendChild(el('div', '', it.title));
+      t.appendChild(el('div', 'muted', it.path + ' · ' + (it.axis || '축 없음') +
+        ' · ' + it.bytes + 'B'));
+      r.appendChild(t);
+      const g = el('button', 'act', '계획만');
+      g.onclick = () => startIngest(it.path, true);
+      const bt = el('button', 'act pri', '인제스트');
+      bt.onclick = () => startIngest(it.path, false);
+      if (!L.ok) { g.disabled = bt.disabled = true; }
+      r.appendChild(g); r.appendChild(bt);
+      pd.appendChild(r);
+    });
+  }
+  const rv = await get('/review'), rb = $('#review');
+  rb.innerHTML = '';
+  if (!rv.open.length) { rb.className = 'muted';
+    rb.textContent = rv.exists ? '열린 항목 없음 (처리 완료 ' + rv.done + ')' : '아직 없음'; }
+  else { rb.className = '';
+    rv.open.forEach(x => { const e = el('div', 'rv'); e.innerHTML = x; rb.appendChild(e); }); }
+}
+
+async function startIngest(path, planOnly) {
+  const r = await post('/ingest', { path: path, plan_only: planOnly ? 'true' : 'false' });
+  if (r.error) { alert(r.error); return; }
+  $('#jobbox').style.display = '';
+  if (poll) clearInterval(poll);
+  poll = setInterval(() => tick(r.jid), 1200);
+  tick(r.jid);
+}
+
+async function tick(jid) {
+  const d = await get('/ingest/job?jid=' + encodeURIComponent(jid));
+  const sv = $('#steps'); sv.innerHTML = '';
+  STEPS.forEach((n, i) => {
+    const e = el('div', '', (i + 1) + '. ' + n);
+    if (d.step > i + 1 || d.done) e.className = 'ok';
+    else if (d.step === i + 1) e.className = 'on';
+    sv.appendChild(e);
+  });
+  $('#jobmsg').textContent = (d.error ? '실패 — ' + d.error : d.stage + ' … ' + d.path);
+  const o = $('#jobout'); o.innerHTML = '';
+  if (d.analysis) {
+    const a = d.analysis, x = el('div', 'box');
+    let h = '<h2>분석</h2><div class="muted">' + (a.summary || '') + '</div>';
+    if (a.axis_check && a.axis_check.agrees === false)
+      h += '<div class="warnbox" style="margin-top:9px"><b>축 불일치</b> &mdash; 적힌 것 ' +
+        a.axis_check.stated + ' / 판단 ' + a.axis_check.judged + '<br>' +
+        (a.axis_check.why || '') + '</div>';
+    if ((a.update_targets || []).length)
+      h += '<div style="margin-top:9px"><b>갱신 대상</b><br>' +
+        a.update_targets.map(t => '· ' + t.page + ' &mdash; ' + t.what).join('<br>') + '</div>';
+    if ((a.new_page_candidates || []).length)
+      h += '<div style="margin-top:9px"><b>새 페이지 후보</b><br>' +
+        a.new_page_candidates.map(c => (c.passes ? '통과 ' : '보류 ') + c.name +
+          ' &mdash; ' + c.why).join('<br>') + '</div>';
+    if ((a.conflicts || []).length)
+      h += '<div style="margin-top:9px"><b>모순 발견 ' + a.conflicts.length +
+        '건</b> &mdash; 리뷰 큐로 간다</div>';
+    x.innerHTML = h; o.appendChild(x);
+  }
+  if (d.applied) {
+    const x = el('div', 'box');
+    x.innerHTML = '<h2>반영</h2>' + d.applied.map(a => JSON.stringify(a)).join('<br>');
+    o.appendChild(x);
+  }
+  if (d.done) { clearInterval(poll); poll = null; drawIngest(); load(); }
+}
+
 </script>
 </body>
 </html>

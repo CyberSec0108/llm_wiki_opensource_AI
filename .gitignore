@@ -78,3 +78,7 @@ wiki/_archive/*
 # 개인 식별 및 비공개 작업 현황 파일 제외 (.example.md 템플릿만 공유)
 context/나의 핵심 맥락.md
 context/지금 하는 일.md
+
+# 2단계 인제스트가 만드는 개인 데이터
+wiki/review.md
+tools/llm.json

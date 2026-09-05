@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""볼트 웹 UI — 1단계. LLM을 쓰지 않는다.
+"""볼트 웹 UI — 1·2단계.
 
 원칙 (루트 CLAUDE.md "도구를 추가할 때"):
   1. 파일이 정본이다. 이 서버가 만드는 상태도 전부 파일이다
      (queue.md, lint-ignore.json, reports/)
-  2. 규칙을 코드에 복사하지 않는다 — 1단계는 규칙 판단을 하지 않으므로 해당 없음
+  2. 규칙을 코드에 복사하지 않는다 — 인제스트는 tools/ingest.py가
+     CLAUDE.md·SKILL.md를 **읽어서** 프롬프트로 쓴다
   3. 이 서버를 꺼도 Obsidian·git·Claude Code가 그대로 동작한다
 
 실행:
@@ -12,7 +13,7 @@
     python tools/server.py --port 8000
     python tools/server.py --lan            같은 와이파이의 다른 기기에서 접속
 """
-import io, os, re, json, glob, shutil, sqlite3, tempfile, subprocess, datetime
+import io, os, re, sys, json, glob, shutil, sqlite3, tempfile, subprocess, datetime, threading
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -22,7 +23,15 @@ ZOTERO = os.path.join(os.path.expanduser('~'), 'Zotero')
 PREFIX_AXIS = {'ai-for-security': '(AI활용)', 'securing-ai': '(AI보호)',
                'both': '(공통)', '': '(기타)'}
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import llm       # noqa: E402  제공자 계층
+import ingest    # noqa: E402  인제스트 파이프라인
+
 app = FastAPI(title='LLM Wiki')
+
+# 실행 중인 인제스트. 진행 상황 자체는 reports/ 의 파일이 정본이고,
+# 이 딕셔너리는 스레드를 붙잡아 두기 위한 것뿐이다.
+JOBS = {}
 
 
 def rd(p):
@@ -350,6 +359,71 @@ def api_search(q: str):
             hits.append({'name': b, 'folder': folder, 'hits': n, 'snippet': snip,
                          'openable': folder in ('wiki', 'context', 'docs')})
     return sorted(hits, key=lambda x: -x['hits'])[:40]
+
+
+@app.get('/api/llm')
+def api_llm():
+    """LLM을 부를 수 있는 상태인가. UI가 이걸로 버튼을 켠다."""
+    return llm.status()
+
+
+@app.post('/api/llm')
+def api_llm_set(provider: str = Form(None), model: str = Form(None)):
+    llm.save_config(provider=provider or None, model=model or None)
+    return llm.status()
+
+
+@app.get('/api/ingest')
+def api_ingest_list():
+    return {'pending': ingest.pending(), 'llm': llm.status(),
+            'running': [k for k, v in JOBS.items() if v.is_alive()]}
+
+
+@app.post('/api/ingest')
+def api_ingest_start(path: str = Form(...), plan_only: bool = Form(False)):
+    """인제스트를 백그라운드로 시작하고 작업 번호를 준다.
+
+    긴 작업이라 요청 안에서 끝내면 브라우저가 먼저 끊긴다.
+    진행 상황은 reports/ingest-<id>.json 을 폴링해서 본다.
+    """
+    st = llm.status()
+    if not st['ok']:
+        return JSONResponse({'error': st['why'], 'llm': st}, status_code=400)
+    jid = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+    ingest.progress(jid, path=path, stage='대기', step=0, of=4, done=False)
+
+    def work():
+        try:
+            ingest.run(path, plan_only=plan_only, jid=jid)
+        except Exception as e:                      # noqa: BLE001
+            ingest.progress(jid, stage='실패', done=True, error=str(e)[:500])
+
+    t = threading.Thread(target=work, daemon=True)
+    JOBS[jid] = t
+    t.start()
+    return {'jid': jid}
+
+
+@app.get('/api/ingest/job')
+def api_ingest_job(jid: str):
+    p = os.path.join(ROOT, 'reports', 'ingest-%s.json' % jid)
+    if not os.path.exists(p):
+        return JSONResponse({'error': '없는 작업'}, status_code=404)
+    d = json.loads(rd(p))
+    d['alive'] = jid in JOBS and JOBS[jid].is_alive()
+    return d
+
+
+@app.get('/api/review')
+def api_review():
+    """리뷰 큐 — 자동 인제스트가 판단을 미룬 것들."""
+    p = os.path.join(ROOT, 'wiki', 'review.md')
+    if not os.path.exists(p):
+        return {'open': [], 'done': 0, 'exists': False}
+    t = rd(p)
+    op = re.findall(r'^- \[ \] (.+)$', t, re.M)
+    return {'open': op, 'done': len(re.findall(r'^- \[x\]', t, re.M)),
+            'exists': True}
 
 
 @app.get('/', response_class=HTMLResponse)
