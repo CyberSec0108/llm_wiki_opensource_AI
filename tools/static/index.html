@@ -10,13 +10,20 @@
   :root{
     --bg:#f7f7f5; --card:#fff; --line:#e3e3df; --ink:#1f1f1d; --dim:#6b6b66;
     --a:#2d7d46; --b:#7b4fa8; --warn:#b26a00; --err:#c0392b; --acc:#2563eb;
+    --acc-t:#2563eb;   /* 글자용 강조색. 채움 버튼의 --acc 와 분리해 둔다 */
     --navy:#0d2233;
   }
+  /* 다크는 헤더 네이비(--navy)와 같은 계열로 맞춘다.
+     예전 값은 따뜻한 갈회색(#1a1a18)이라 차가운 네이비 헤더와 어긋났다.
+     --acc-t 는 어두운 바탕에서 읽히도록 --acc 보다 밝게 둔다 */
   @media (prefers-color-scheme:dark){
-    :root{--bg:#1a1a18;--card:#232320;--line:#38382f;--ink:#eceae4;--dim:#9a978e;}
+    :root{--bg:#0b141d;--card:#132131;--line:#26394d;--ink:#e4ecf3;--dim:#93a7b8;
+          --acc-t:#6aa9ff;--a:#4fb477;--b:#a98bdb;--warn:#dfa14a;--err:#e8746c;}
   }
-  :root[data-theme="dark"]{--bg:#1a1a18;--card:#232320;--line:#38382f;--ink:#eceae4;--dim:#9a978e;}
-  :root[data-theme="light"]{--bg:#f7f7f5;--card:#fff;--line:#e3e3df;--ink:#1f1f1d;--dim:#6b6b66;}
+  :root[data-theme="dark"]{--bg:#0b141d;--card:#132131;--line:#26394d;--ink:#e4ecf3;
+    --dim:#93a7b8;--acc-t:#6aa9ff;--a:#4fb477;--b:#a98bdb;--warn:#dfa14a;--err:#e8746c;}
+  :root[data-theme="light"]{--bg:#f7f7f5;--card:#fff;--line:#e3e3df;--ink:#1f1f1d;
+    --dim:#6b6b66;--acc-t:#2563eb;--a:#2d7d46;--b:#7b4fa8;--warn:#b26a00;--err:#c0392b;}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
        font:14px/1.6 -apple-system,"Segoe UI","Malgun Gothic",sans-serif}
@@ -96,9 +103,10 @@
   .doc pre,.ans pre{max-width:100%;overflow-x:auto}
   .doc iframe,.doc video,.ans iframe,.ans video{max-width:100%}
   .doc,.ans{overflow-wrap:anywhere}
-  .doc h1{font-size:21px;margin:20px 0 10px} .doc h2{font-size:16px;margin:22px 0 9px}
-  .doc h3{font-size:14px;margin:18px 0 7px;color:var(--dim)}
-  .doc h4{font-size:13px;margin:14px 0 6px;color:var(--dim)}
+  /* 위키 글보기 제목은 2~3pt 크게 */
+  .doc h1{font-size:25px;margin:22px 0 11px} .doc h2{font-size:19px;margin:24px 0 10px}
+  .doc h3{font-size:16.5px;margin:19px 0 8px;color:var(--dim)}
+  .doc h4{font-size:15px;margin:15px 0 7px;color:var(--dim)}
   .doc .ai-markdown-table-wrap{overflow-x:auto}
   /* 인용 [n] — Sec_AI 와 같은 모양: 테두리 없이 연한 바탕 + 파란 굵은 글자 */
   .ai-citation-ref{display:inline-flex;align-items:center;min-width:0;width:auto;
@@ -308,6 +316,17 @@
     text-decoration:none;display:inline-block;margin-top:5px}
   .scard.hl{background:color-mix(in srgb,var(--acc) 10%,transparent);
     border-radius:8px;padding-left:8px;padding-right:8px}
+
+  /* 위키 글보기 머리글의 페이지 이름 (JS 가 #phead 안에 <b> 로 넣는다) */
+  #phead b{font-size:18px;font-weight:660;letter-spacing:-.01em}
+
+  /* 강조색 글자만 --acc-t 로 돌린다. 흰 글자를 얹는 채움 버튼(.pri, .newbtn,
+     .msg-user, 보내기 단추)은 --acc 그대로 둬야 대비가 유지된다.
+     선택자 특정도는 위와 같고 뒤에 있어 이 규칙이 이긴다 */
+  a.pill:hover, button.act:hover, .chip.on, .ai-citation-ref,
+  .doc a.wl, .steps div.on, .lay-wiki, .src a, .qhead-label,
+  .qwelcome button, .qsrc-top p, .gen li[data-state="active"],
+  .scard-num, .scard a{color:var(--acc-t)}
 </style>
 </head>
 <body>
