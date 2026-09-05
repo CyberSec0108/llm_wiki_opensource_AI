@@ -249,7 +249,7 @@
 
   /* 진행 인디케이터 — Sec_AI 의 세로 리스트 방식(가로 막대가 아니다).
      동그란 마커가 pending → active(맥박) → done(초록) 으로 바뀐다. */
-  .gen{max-width:100%;border:1px solid var(--acc);border-radius:11px;
+  .gen{max-width:400px;border:1px solid var(--acc);border-radius:11px;
     padding:13px 16px;margin-bottom:12px;background:var(--card);flex:none}
   .gen-title{display:inline-block;font-weight:700;font-size:13px;
     background:linear-gradient(90deg,var(--dim) 20%,var(--acc) 50%,var(--dim) 80%);
@@ -272,7 +272,7 @@
 
   /* 모델의 생각 — 첫 답변 토큰까지 수십 초가 걸려서, 그동안 이걸 보여준다.
      답변이 시작되면 자동으로 접힌다. */
-  .think{border:1px solid var(--line);border-radius:11px;margin-bottom:12px;
+  .think{max-width:520px;border:1px solid var(--line);border-radius:11px;margin-bottom:12px;
     background:var(--bg);flex:none;overflow:hidden}
   .think summary{cursor:pointer;padding:10px 14px;font-size:12.5px;color:var(--dim);
     list-style:none;display:flex;align-items:center;gap:8px}
@@ -819,6 +819,19 @@ function qSteps(stepIdx) {
 function qStepsRemove() {
   document.getElementById('qsteps')?.remove();
 }
+
+function qAnswerBox() {
+  // 답변이 그려지는 자리. 렌더러는 이 안쪽 div 에 그린다.
+  let box = document.getElementById('qanswer');
+  if (!box) {
+    box = el('div', 'ans'); box.id = 'qanswer';
+    box.appendChild(el('div', '', ''));
+    $('#qout').appendChild(box);
+  }
+  return box.firstChild;
+}
+
+let qRenderer = null, qThinkTimer = null, qThinkT0 = 0, qThinkFolded = false;
 
 function qThinkBox() {
   // 답변 작성 단계에 들어가면 무조건 띄운다.
