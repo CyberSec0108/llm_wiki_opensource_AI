@@ -174,13 +174,13 @@
   .qmain{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100%;
     background:var(--card);overflow:hidden;min-width:0}
   @media(max-width:860px){.qmain{height:auto;grid-template-rows:auto auto auto}}
-  .qhead{display:flex;align-items:flex-start;gap:12px;padding:16px 24px;
+  .qhead{display:flex;align-items:flex-start;gap:12px;padding:14px 18px;
     border-bottom:1px solid var(--line)}
   .qhead-label{color:var(--acc);font-size:11.5px;font-weight:700;margin:0 0 3px}
   .qhead h2{font-size:17px;margin:0;font-weight:650;letter-spacing:-.02em}
   .qhead button{margin-left:auto;flex:none;width:36px;height:36px;padding:0;
     display:grid;place-items:center;border-radius:8px}
-  #qout{min-height:0;overflow-y:auto;padding:22px 26px;
+  #qout{min-height:0;overflow-y:auto;padding:16px 18px;
     display:flex;flex-direction:column}
   @media(max-width:860px){#qout{max-height:62vh}}
 
@@ -193,7 +193,7 @@
   .qwelcome button:hover{background:color-mix(in srgb,var(--acc) 8%,transparent)}
 
   /* 입력창 — 둥근 shell 안에 textarea, 오른쪽에 원형 전송 버튼 */
-  .qcomposer{padding:14px 26px 18px;
+  .qcomposer{padding:12px 18px 16px;
     background:linear-gradient(180deg,transparent,var(--card) 30%)}
   .qcomposer-shell{position:relative;display:flex;align-items:flex-end;
     min-height:66px;padding:10px 205px 10px 16px;border:1px solid var(--line);
@@ -227,10 +227,10 @@
   .qsrc-close{margin-left:auto;width:28px;height:28px;padding:0;border-radius:7px;
     display:grid;place-items:center}
 
-  .msg-user{align-self:flex-end;max-width:80%;background:var(--acc);color:#fff;
+  .msg-user{align-self:flex-end;max-width:70%;background:var(--acc);color:#fff;
     border-radius:14px 14px 3px 14px;padding:10px 15px;margin-bottom:14px;
     font-size:13.5px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
-  .ans{margin-bottom:14px;flex:none;max-width:min(780px,94%);
+  .ans{margin-bottom:14px;flex:none;width:100%;
     font-size:14.5px;line-height:1.75;color:var(--ink);overflow-wrap:anywhere}
   .ans p{margin:0 0 10px;line-height:1.75}
   .ans h3,.ans h4{margin:18px 0 8px;padding-top:.35em;
@@ -249,7 +249,7 @@
 
   /* 진행 인디케이터 — Sec_AI 의 세로 리스트 방식(가로 막대가 아니다).
      동그란 마커가 pending → active(맥박) → done(초록) 으로 바뀐다. */
-  .gen{max-width:430px;border:1px solid var(--acc);border-radius:11px;
+  .gen{max-width:100%;border:1px solid var(--acc);border-radius:11px;
     padding:13px 16px;margin-bottom:12px;background:var(--card);flex:none}
   .gen-title{display:inline-block;font-weight:700;font-size:13px;
     background:linear-gradient(90deg,var(--dim) 20%,var(--acc) 50%,var(--dim) 80%);
