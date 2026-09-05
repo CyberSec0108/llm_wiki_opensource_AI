@@ -233,11 +233,14 @@ def chat(system, user, max_tokens=None, cache_system=True, schema=None):
     from openai import OpenAI
     cl = OpenAI(base_url=p['base_url'], api_key=key,
                 timeout=c['timeout'], max_retries=1)
+    # 스키마 호출에는 추론 조절을 걸지 않는다. 실측에서 effort 를 명시하면
+    # 오히려 추론이 늘었다 — 간단한 스키마 호출은 미설정이 추론 토큰 1개인데
+    # low 는 206개였다(effort 가 최소 예산을 깐다). 모델이 알아서 하게 둔다.
+    # 조절이 필요한 건 답변을 길게 쓰는 스트리밍 호출뿐이다.
     kw = dict(
         model=c['model'], max_tokens=mt, temperature=c['temperature'],
         messages=[{'role': 'system', 'content': system},
                   {'role': 'user', 'content': user}],
-        extra_body=reasoning_body(c),
         extra_headers={'HTTP-Referer': 'https://github.com/CyberSec0108/llm_wiki_opensource_AI',
                        'X-Title': 'LLM Wiki'},
     )
