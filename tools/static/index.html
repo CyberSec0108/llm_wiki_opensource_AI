@@ -38,8 +38,10 @@
     display:grid;place-items:center;background:transparent;border-color:#3d5a76;
     color:#c9dcec;font-size:15px;margin-left:8px}
   #themeToggle:hover{background:#1a3c5a;color:#fff;border-color:#3d5a76}
-  main{max-width:min(1320px,calc(100% - 48px));margin:0 auto;padding:22px}
-  main.wide{max-width:min(1500px,calc(100% - 48px))}
+  /* 모든 탭 좌우 여백 +10% (한쪽 5%씩). 넓은 화면에서도 티가 나게 상한도 같이 줄인다 */
+  main{max-width:min(1190px,90%);margin:0 auto;padding:22px}
+  main.wide{max-width:min(1350px,90%)}
+  @media(max-width:860px){main{max-width:calc(100% - 24px);padding:16px 12px}}
   section{display:none} section.on{display:block}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:10px}
   .stat{background:var(--card);border:1px solid var(--line);border-radius:11px;
@@ -180,14 +182,16 @@
   .qmain{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100%;
     background:var(--card);overflow:hidden;min-width:0}
   @media(max-width:860px){.qmain{height:auto;grid-template-rows:auto auto auto}}
+  /* 대화 열의 좌우 여백. 머리글·답변·입력창이 한 줄로 맞아야 하므로 한 곳에서 정한다 */
+  .qmain{--qpad:calc(5% + clamp(10px,1vw,20px))}
   .qhead{display:flex;align-items:flex-start;gap:12px;
-    padding:14px calc(2.5% + clamp(10px,1vw,20px));
+    padding:14px var(--qpad);
     border-bottom:1px solid var(--line)}
   .qhead-label{color:var(--acc);font-size:11.5px;font-weight:700;margin:0 0 3px}
   .qhead h2{font-size:17px;margin:0;font-weight:650;letter-spacing:-.02em}
   .qhead button{margin-left:auto;flex:none;width:36px;height:36px;padding:0;
     display:grid;place-items:center;border-radius:8px}
-  #qout{min-height:0;overflow-y:auto;padding:20px calc(2.5% + clamp(10px,1vw,20px));
+  #qout{min-height:0;overflow-y:auto;padding:20px var(--qpad);
     display:flex;flex-direction:column}
   @media(max-width:860px){#qout{max-height:62vh;padding:16px 16px}
     .qcomposer{padding:12px 16px 14px}
@@ -202,7 +206,7 @@
   .qwelcome button:hover{background:color-mix(in srgb,var(--acc) 8%,transparent)}
 
   /* 입력창 — 둥근 shell 안에 textarea, 오른쪽에 원형 전송 버튼 */
-  .qcomposer{padding:12px calc(2.5% + clamp(10px,1vw,20px)) 16px;
+  .qcomposer{padding:12px var(--qpad) 16px;
     background:linear-gradient(180deg,transparent,var(--card) 30%)}
   .qcomposer-shell{position:relative;display:flex;align-items:flex-end;
     min-height:66px;padding:10px 205px 10px 16px;border:1px solid var(--line);

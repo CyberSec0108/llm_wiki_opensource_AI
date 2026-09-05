@@ -147,7 +147,8 @@ const fire = (t, d) => (listeners[t] || []).forEach(f => f({ data: JSON.stringif
     fire('stage', { stage: '질문 확인', step: 0, of: 3 });
     fire('candidates', { pages: [{ ordinal: 1, page: '(AI보호) 보상 해킹' }] });
     fire('stage', { stage: '답변 작성', step: 2, of: 3 });
-    console.log('답변작성 단계에서 진행표시 있나:', !!doc.getElementById('qsteps'));
+    // 여러 턴을 구분하려고 id 에 턴 번호가 붙는다 — qsteps-1, qanswer-1 …
+    console.log('답변작성 단계에서 진행표시 있나:', !!doc.getElementById('qsteps-1'));
 
     fire('token', { delta: '# 보상 해킹\n\n' });
     fire('token', { delta: '보상 해킹은 규칙은 지키면서[1] 의도와 다른 결과를 내는 것이다.' });
@@ -155,10 +156,10 @@ const fire = (t, d) => (listeners[t] || []).forEach(f => f({ data: JSON.stringif
     await new Promise(r => setTimeout(r, 200));   // 렌더러 throttle(75ms) 대기
     const out = registry.qout;
     const text = out.textContent;
-    console.log('첫 토큰 뒤 진행표시 남아있나:', !!doc.getElementById('qsteps'), '(false 여야 함)');
+    console.log('첫 토큰 뒤 진행표시 남아있나:', !!doc.getElementById('qsteps-1'), '(false 여야 함)');
     console.log('#qout 텍스트:', JSON.stringify(text.slice(0, 80)));
 
-    const ansBox = doc.getElementById('qanswer');
+    const ansBox = doc.getElementById('qanswer-1');
     const inner = ansBox && ansBox.children[0];
     const fellBack = inner && inner.attrs && inner.attrs['data-markdown-fallback'];
     console.log('렌더 방식:', fellBack ? '평문 폴백' : '마크다운 렌더');
