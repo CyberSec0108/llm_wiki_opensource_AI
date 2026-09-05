@@ -88,6 +88,12 @@
   .item small{display:block;color:var(--dim);font-size:11.5px;
               overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .doc{line-height:1.75}
+  /* 원본 기사에는 큰 이미지가 그대로 들어 있다 — 폭을 넘지 않게 맞춘다 */
+  .doc img,.ans img{max-width:100%;height:auto;border-radius:8px;display:block;
+    margin:12px 0}
+  .doc pre,.ans pre{max-width:100%;overflow-x:auto}
+  .doc iframe,.doc video,.ans iframe,.ans video{max-width:100%}
+  .doc,.ans{overflow-wrap:anywhere}
   .doc h1{font-size:21px;margin:20px 0 10px} .doc h2{font-size:16px;margin:22px 0 9px}
   .doc h3{font-size:14px;margin:18px 0 7px;color:var(--dim)}
   .doc h4{font-size:13px;margin:14px 0 6px;color:var(--dim)}
@@ -775,18 +781,34 @@ loadStatus(); loadStubs(); loadLint(); loadTags(); loadZotero(); loadWiki();
 })();
 drawIngest();
 /* ===== 질문 ===== */
+// 대화는 아래로 쌓인다. 새 질문을 해도 앞의 질문·답변은 그대로 남는다 —
+// 이어서 묻다 보면 앞의 답을 다시 봐야 할 때가 많다.
+// 턴마다 자기 요소(진행표시·생각·답변·출처)를 따로 들고 있어야 해서
+// 고정 id 대신 턴 번호를 붙인다.
 const STLABEL = { ok: '자유롭게 인용', warn: '검증 필요', err: '인용 금지' };
 const QEXAMPLES = [
   '프롬프트 인젝션을 어떻게 막나?',
   '보상 해킹이 뭐야?',
   'Sysmon 로그의 온톨로지 구성 요소는?',
 ];
-let qES = null, qJID = null, qLastQ = '', qCiteMap = {}, qAllowedIds = [];
+
+let qES = null, qJID = null, qLastQ = '';
+let qTurn = 0;              // 지금까지 만든 턴 수
+const T = {};               // 턴 번호 -> 그 턴의 상태
+
+function turn(n) {
+  return (T[n] = T[n] || { citeMap: {}, renderer: null, thinkTimer: null,
+                           thinkT0: 0, thinkFolded: false, allowedIds: [] });
+}
+
+function qScroll() {
+  const o = $('#qout');
+  o.scrollTop = o.scrollHeight;
+}
 
 function drawWelcome() {
-  // Sec_AI 의 chat-welcome — 대화가 비었을 때만 가운데에 큰 예시 버튼을 놓는다
   const box = $('#qout');
-  if (box.querySelector('.msg-user')) return;
+  if (box.querySelector('.msg-user')) return;   // 대화가 있으면 안 띄운다
   box.innerHTML = '';
   const w = el('div', 'qwelcome');
   w.appendChild(el('strong', '', '이렇게 물어보세요'));
@@ -799,167 +821,198 @@ function drawWelcome() {
   box.appendChild(w);
 }
 
-function qSteps(stepIdx) {
-  // Sec_AI 의 generation-indicator — 세로 목록에 마커가
-  // pending → active(맥박) → done(초록) 으로 바뀐다.
-  // **첫 답변 토큰이 오면 통째로 사라진다** (답변이 그 자리를 대신한다).
+// ── 턴 단위 요소 ──
+function qSteps(n, stepIdx) {
   const STEPS = ['질문 확인', '위키 후보 찾기', '답변 작성'];
-  let wrap = document.getElementById('qsteps');
+  let wrap = document.getElementById('qsteps-' + n);
   if (!wrap) {
-    wrap = el('div', 'gen'); wrap.id = 'qsteps';
+    wrap = el('div', 'gen'); wrap.id = 'qsteps-' + n;
     wrap.setAttribute('role', 'status');
     wrap.appendChild(el('strong', 'gen-title', '답변을 준비하고 있습니다'));
     wrap.appendChild(document.createElement('ol'));
-    $('#qout').appendChild(wrap);
+    $('#qout').appendChild(wrap); qScroll();
   }
   const ol = wrap.querySelector('ol'); ol.innerHTML = '';
-  STEPS.forEach((n, i) => {
+  STEPS.forEach((label, i) => {
     const li = document.createElement('li');
     li.dataset.state = i < stepIdx ? 'done' : i === stepIdx ? 'active' : 'pending';
     li.appendChild(el('span', 'gen-dot'));
-    li.appendChild(el('span', '', n));
+    li.appendChild(el('span', '', label));
     ol.appendChild(li);
   });
 }
 
-function qStepsRemove() {
-  document.getElementById('qsteps')?.remove();
+function qStepsRemove(n) {
+  document.getElementById('qsteps-' + n)?.remove();
 }
 
-function qAnswerBox() {
-  // 답변이 그려지는 자리. 렌더러는 이 안쪽 div 에 그린다.
-  let box = document.getElementById('qanswer');
+function qAnswerBox(n) {
+  let box = document.getElementById('qanswer-' + n);
   if (!box) {
-    box = el('div', 'ans'); box.id = 'qanswer';
+    box = el('div', 'ans'); box.id = 'qanswer-' + n;
     box.appendChild(el('div', '', ''));
-    $('#qout').appendChild(box);
+    $('#qout').appendChild(box); qScroll();
   }
   return box.firstChild;
 }
 
-let qRenderer = null, qThinkTimer = null, qThinkT0 = 0, qThinkFolded = false;
-
-function qThinkBox() {
-  // 답변 작성 단계에 들어가면 무조건 띄운다.
-  // 모델의 생각(reasoning)은 OpenRouter 공급자에 따라 올 때도 안 올 때도 있다 —
-  // 실측에서 같은 모델이 1,437개를 보내기도, 0개를 보내기도 했다.
-  // 그래서 생각이 없어도 최소한 경과 시간은 보여준다.
-  let d = document.getElementById('qthink');
+function qThinkBox(n) {
+  // 모델의 생각은 OpenRouter 공급자에 따라 올 때도 안 올 때도 있다.
+  // 안 와도 경과 시간은 보여줘야 멈춘 것처럼 보이지 않는다.
+  const t = turn(n);
+  let d = document.getElementById('qthink-' + n);
   if (!d) {
     d = document.createElement('details');
-    d.className = 'think'; d.id = 'qthink'; d.open = true;
+    d.className = 'think'; d.id = 'qthink-' + n; d.open = true;
     const sm = document.createElement('summary');
-    sm.id = 'qthink-sum'; sm.textContent = '답변을 쓰는 중… 0초';
-    const body = el('div', 'think-body'); body.id = 'qthink-body';
-    body.textContent = '';
+    sm.id = 'qthink-sum-' + n; sm.textContent = '답변을 쓰는 중… 0초';
+    const body = el('div', 'think-body'); body.id = 'qthink-body-' + n;
     d.appendChild(sm); d.appendChild(body);
-    $('#qout').appendChild(d);
-    qThinkT0 = Date.now();
-    qThinkTimer = setInterval(() => {
-      const x = document.getElementById('qthink-sum');
-      if (x && !qThinkFolded) {
-        const b = document.getElementById('qthink-body');
+    $('#qout').appendChild(d); qScroll();
+    t.thinkT0 = Date.now();
+    t.thinkTimer = setInterval(() => {
+      const x = document.getElementById('qthink-sum-' + n);
+      if (x && !t.thinkFolded) {
+        const b = document.getElementById('qthink-body-' + n);
         const has = b && b.textContent.trim().length > 0;
         x.textContent = (has ? '모델이 생각하는 중… ' : '답변을 쓰는 중… ') +
-          Math.round((Date.now() - qThinkT0) / 1000) + '초';
+          Math.round((Date.now() - t.thinkT0) / 1000) + '초';
       }
     }, 1000);
   }
-  return document.getElementById('qthink-body');
+  return document.getElementById('qthink-body-' + n);
 }
 
-function qThinkAppend(delta) {
-  const b = qThinkBox();
+function qThinkAppend(n, delta) {
+  const b = qThinkBox(n);
   b.textContent += delta;
   b.scrollTop = b.scrollHeight;
 }
 
-function qThinkFold() {
-  // 답변이 시작되면 접는다. 생각이 실제로 온 경우에만 남긴다 —
-  // 빈 상자를 접어두면 눌러봐야 아무것도 없어서 헷갈린다.
-  if (qThinkTimer) { clearInterval(qThinkTimer); qThinkTimer = null; }
-  const d = document.getElementById('qthink');
-  if (!d || qThinkFolded) return;
-  qThinkFolded = true;
-  const body = document.getElementById('qthink-body');
-  if (!body || !body.textContent.trim()) { d.remove(); return; }
+function qThinkFold(n) {
+  const t = turn(n);
+  if (t.thinkTimer) { clearInterval(t.thinkTimer); t.thinkTimer = null; }
+  const d = document.getElementById('qthink-' + n);
+  if (!d || t.thinkFolded) return;
+  t.thinkFolded = true;
+  const body = document.getElementById('qthink-body-' + n);
+  if (!body || !body.textContent.trim()) { d.remove(); return; }   // 빈 상자는 남기지 않는다
   d.open = false;
-  const sec = Math.round((Date.now() - qThinkT0) / 1000);
-  const sm = document.getElementById('qthink-sum');
-  if (sm) sm.textContent = '모델의 생각 ' + sec + '초 (눌러서 보기)';
+  const sm = document.getElementById('qthink-sum-' + n);
+  if (sm) sm.textContent = '모델의 생각 ' +
+    Math.round((Date.now() - t.thinkT0) / 1000) + '초 (눌러서 보기)';
 }
 
-function qThinkStop() {
-  if (qThinkTimer) { clearInterval(qThinkTimer); qThinkTimer = null; }
+// ── 출처 드로어 ──
+function qSrcOpen(on) {
+  $('#qshell').classList.toggle('src-open', on);
+  $('#qsrc-toggle').title = on ? '답변 근거 닫기' : '답변 근거 열기';
 }
 
+function qSrcRender(n, rows, note) {
+  // 드로어는 하나뿐이라 항상 "지금 보고 있는 턴"의 근거를 보여준다.
+  const sb = $('#qsrc-body');
+  sb.innerHTML = '';
+  if (note) {
+    const p = el('p', 'muted', note); p.style.margin = '0 0 10px';
+    sb.appendChild(p);
+  }
+  const t = turn(n);
+  t.citeMap = {};
+  rows.forEach(r => {
+    const card = el('div', 'scard'); card.dataset.n = r.ordinal;
+    const head = el('div', 'scard-head');
+    head.appendChild(el('span', 'scard-num', '[' + r.ordinal + ']'));
+    head.appendChild(el('strong', '', r.page));
+    card.appendChild(head);
+    if (r.status) {
+      const meta = [r.status, STLABEL[r.level] || ''];
+      if (r.needs_source) meta.push('보강 필요');
+      if (r.derived) meta.push('파생 페이지');
+      card.appendChild(el('p', '', meta.filter(Boolean).join(' · ')));
+    }
+    const a = el('a', '', '위키에서 열기 ↗');
+    a.href = '/?tab=wiki&page=' + encodeURIComponent(r.page);
+    a.target = '_blank'; a.rel = 'noopener';
+    card.appendChild(a);
+    t.citeMap[r.ordinal] = card;
+    sb.appendChild(card);
+  });
+  qSrcOpen(true);
+}
+
+function onCite(n, citationId) {
+  // 인용을 누르면 그 턴의 근거를 드로어에 띄우고 해당 카드를 짚어준다
+  const t = turn(n);
+  if (t.sources) qSrcRender(n, t.sources);
+  const num = (citationId.match(/\d+/) || [])[0];
+  const row = turn(n).citeMap[num];
+  if (!row) return;
+  document.querySelectorAll('.scard.hl').forEach(x => x.classList.remove('hl'));
+  row.classList.add('hl');
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => row.classList.remove('hl'), 1800);
+}
+
+// ── 질의 ──
 async function startQuery() {
   const v = $('#qq').value.trim();
   if (!v || qES) return;
   qLastQ = v;
-  $('#qout').innerHTML = '';
-  $('#qout').appendChild(el('div', 'msg-user', v));
+  const n = ++qTurn;
+  const t = turn(n);
+
+  document.getElementById('qwelcome')?.remove();
+  $('#qout').querySelector('.qwelcome')?.remove();
+  $('#qout').appendChild(el('div', 'msg-user', v));   // 앞의 대화는 지우지 않는다
   $('#qhead-title').textContent = v.length > 46 ? v.slice(0, 46) + '…' : v;
+  $('#qq').value = '';
+  qScroll();
+
   $('#qgo').disabled = true; $('#qstop').hidden = false;
-  qSteps(0);
+  qSteps(n, 0);
+
   const profile = $('#qprofile').value;
-  const maxPages = profile === 'fast' ? 2 : 4;
-  const useRaw = profile === 'precise';
   let r;
   try {
-    r = await post('/query/start', { q: v, use_raw: useRaw ? 'true' : 'false',
-      max_pages: maxPages });
+    r = await post('/query/start', {
+      q: v, use_raw: profile === 'precise' ? 'true' : 'false',
+      max_pages: profile === 'fast' ? 2 : 4 });
   } catch (e) { r = { error: String(e) }; }
   if (r.error) { qDone(); showQError(r.error); return; }
-  qJID = r.jid;
-  qRenderer = null; qCiteMap = {}; qAllowedIds = []; qThinkFolded = false;
-  qES = new EventSource('/api/query/events?jid=' + encodeURIComponent(qJID));
+  qJID = r.jid; t.jid = r.jid;
+
+  qES = new EventSource('/api/query/events?jid=' + encodeURIComponent(r.jid));
   qES.addEventListener('stage', e => {
     const d = JSON.parse(e.data);
-    qSteps(d.step);
-    if (d.step === 2) qThinkBox();   // 생각이 없어도 경과 시간은 보여준다
+    qSteps(n, d.step);
+    if (d.step === 2) qThinkBox(n);
   });
   qES.addEventListener('candidates', e => {
-    // 스트리밍이 시작되기 전에 순번표를 미리 받는다 — 그래야 [1][2]가
-    // 타이핑되는 동안에도 클릭 가능한 버튼으로 보인다.
     const pages = JSON.parse(e.data).pages || [];
-    qAllowedIds = pages.map(p => '[' + p.ordinal + ']');
-    if (!pages.length) return;
-    const sb = $('#qsrc-body');
-    sb.innerHTML = '<p class="muted" style="margin:0 0 10px">읽는 중 ' +
-      pages.length + '쪽 — 답변이 끝나면 실제 인용만 남는다</p>';
-    pages.forEach(p => {
-      const card = el('div', 'scard'); card.dataset.n = p.ordinal;
-      const head = el('div', 'scard-head');
-      head.appendChild(el('span', 'scard-num', '[' + p.ordinal + ']'));
-      head.appendChild(el('strong', '', p.page));
-      card.appendChild(head);
-      qCiteMap[p.ordinal] = card;
-      sb.appendChild(card);
-    });
-    qSrcOpen(true);
+    t.allowedIds = pages.map(p => '[' + p.ordinal + ']');
+    if (pages.length) qSrcRender(n, pages, '읽는 중 ' + pages.length + '쪽 — 답변이 끝나면 실제 인용만 남는다');
   });
-  qES.addEventListener('reasoning', e => {
-    qThinkAppend(JSON.parse(e.data).delta || '');
-  });
+  qES.addEventListener('reasoning', e => qThinkAppend(n, JSON.parse(e.data).delta || ''));
   qES.addEventListener('token', e => {
-    qStepsRemove();   // 첫 토큰이 오면 진행 표시를 지운다
-    qThinkFold();
+    qStepsRemove(n);          // 첫 토큰이 오면 진행 표시는 사라진다
+    qThinkFold(n);
     const d = JSON.parse(e.data);
-    const target = qAnswerBox();
-    if (!qRenderer) {
-      qRenderer = window.SecAIRestrictedMarkdown
+    const target = qAnswerBox(n);
+    if (!t.renderer) {
+      t.renderer = window.SecAIRestrictedMarkdown
         ? window.SecAIRestrictedMarkdown.createStreamingRenderer(target,
-            { allowedOrigins: [location.origin], allowedCitationIds: qAllowedIds,
-              onCitationActivate: onCite })
+            { allowedOrigins: [location.origin], allowedCitationIds: t.allowedIds,
+              onCitationActivate: id => onCite(n, id) })
         : null;
-      if (!qRenderer) target.classList.add('doc');
+      if (!t.renderer) target.classList.add('doc');
     }
-    if (qRenderer) qRenderer.append(d.delta);
+    if (t.renderer) t.renderer.append(d.delta);
     else target.textContent = (target.textContent || '') + d.delta;
+    qScroll();
   });
-  qES.addEventListener('done', e => { qDone(); finishAnswer(JSON.parse(e.data)); });
-  qES.addEventListener('cancelled', e => { qDone(); cancelledAnswer(JSON.parse(e.data)); });
+  qES.addEventListener('done', e => { qDone(); finishAnswer(n, JSON.parse(e.data)); });
+  qES.addEventListener('cancelled', e => { qDone(); cancelledAnswer(n); });
   qES.addEventListener('error', e => {
     qDone();
     let msg = '연결이 끊겼다';
@@ -969,9 +1022,9 @@ async function startQuery() {
 }
 
 function qDone() {
-  qThinkStop();
   if (qES) { qES.close(); qES = null; }
   $('#qgo').disabled = false; $('#qstop').hidden = true;
+  $('#qstop').disabled = false; $('#qstop').textContent = '■ 중단';
   qJID = null;
 }
 
@@ -982,130 +1035,90 @@ async function stopQuery() {
 }
 
 function showQError(msg) {
-  const x = el('div', 'warnbox'); x.textContent = msg; $('#qout').appendChild(x);
+  const x = el('div', 'warnbox'); x.textContent = msg;
+  $('#qout').appendChild(x); qScroll();
 }
 
-function cancelledAnswer(r) {
-  if (qRenderer) qRenderer.complete();
-  const note = el('div', 'note', '중단됨 — 여기까지만 생성했다. 저장·근거 확인은 되지 않는다.');
-  $('#qout').appendChild(note);
-  $('#qstop').disabled = false; $('#qstop').textContent = '■ 중단';
+function cancelledAnswer(n) {
+  const t = turn(n);
+  qStepsRemove(n); qThinkFold(n);
+  if (t.renderer) t.renderer.complete();
+  $('#qout').appendChild(el('div', 'note', '중단됨 — 여기까지만 생성했다.'));
+  qScroll();
 }
 
-function onCite(citationId) {
-  const n = (citationId.match(/\d+/) || [])[0];
-  const row = qCiteMap[n];
-  if (!row) return;
-  document.querySelectorAll('.src.hl,.scard.hl').forEach(x => x.classList.remove('hl'));
-  row.classList.add('hl');
-  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  setTimeout(() => row.classList.remove('hl'), 1800);
-}
+function finishAnswer(n, r) {
+  const t = turn(n);
+  qThinkFold(n); qStepsRemove(n);
+  t.result = r;
+  t.sources = r.sources || [];
 
-function finishAnswer(r) {
-  qThinkFold();
-  qStepsRemove();
-  // 스트리밍 중에는 그때까지 알던 순번(qAllowedIds)으로만 인용을 인식했다.
-  // 다 끝났으니 실제로 인용된 번호(r.sources)로 최종 렌더를 한 번 더 해서
-  // 확정한다 — 스트리밍 도중 놓친 경계 케이스가 있어도 여기서 바로잡힌다.
+  // 스트리밍 중에는 후보 번호로만 인용을 인식했다. 끝났으니 실제 인용 번호로
+  // 한 번 더 렌더해 확정한다 — 경계 케이스가 있어도 여기서 바로잡힌다.
   const finalIds = (r.sources || []).map(s => '[' + s.ordinal + ']');
-  const target = qAnswerBox();
+  const target = qAnswerBox(n);
   if (window.SecAIRestrictedMarkdown) {
-    qRenderer && qRenderer.destroy();
+    t.renderer && t.renderer.destroy();
     window.SecAIRestrictedMarkdown.render(target, r.answer || '', {
       allowedOrigins: [location.origin], allowedCitationIds: finalIds,
-      onCitationActivate: onCite });
-  } else if (qRenderer) {
-    qRenderer.complete();
+      onCitationActivate: id => onCite(n, id) });
+  } else if (t.renderer) {
+    t.renderer.complete();
   }
-  document.getElementById('qcandidates')?.remove();
-  qCiteMap = {};
-  qLastResult = r;
+
   if (r.in_wiki === false) {
     const w = el('div', 'warnbox');
     w.innerHTML = '<b>위키에 없음</b><br>' + (r.missing || '이 볼트에 근거가 없다.');
-    $('#qout').insertBefore(w, $('#qout').firstChild.nextSibling || null);
+    $('#qout').appendChild(w);
   }
-  const sb = $('#qsrc-body');
-  sb.innerHTML = '';
-  if ((r.sources || []).length) {
-    r.sources.forEach(s => {
-      // Sec_AI 의 chat-source-card: [번호] 제목 / 메타 / 열기 링크
-      const card = el('div', 'scard'); card.dataset.n = s.ordinal;
-      const head = el('div', 'scard-head');
-      head.appendChild(el('span', 'scard-num', '[' + s.ordinal + ']'));
-      head.appendChild(el('strong', '', s.page));
-      card.appendChild(head);
-      const meta = [s.status, STLABEL[s.level] || ''];
-      if (s.needs_source) meta.push('보강 필요');
-      if (s.derived) meta.push('파생 페이지');
-      card.appendChild(el('p', '', meta.filter(Boolean).join(' · ')));
-      const a = el('a', '', '위키에서 열기 ↗');
-      a.href = '/?tab=wiki&page=' + encodeURIComponent(s.page);
-      a.target = '_blank'; a.rel = 'noopener';
-      card.appendChild(a);
-      qCiteMap[s.ordinal] = card;
-      sb.appendChild(card);
-    });
-    if ((r.ghost_citations || []).length) {
-      const g = el('div', 'warnbox'); g.style.marginTop = '10px';
-      g.innerHTML = '<b>범위 밖 인용 번호</b><br>[' + r.ghost_citations.join('], [') + ']';
-      sb.appendChild(g);
-    }
-    qSrcOpen(true);   // 근거가 생기면 드로어를 연다
-  } else {
-    sb.appendChild(el('p', 'muted', '이 답변은 위키 페이지를 인용하지 않았다.'));
-  }
+  if ((r.sources || []).length) qSrcRender(n, r.sources);
+  else $('#qsrc-body').innerHTML = '<p class="muted">이 답변은 위키 페이지를 인용하지 않았다.</p>';
+
   if (r.suggest_collect) {
-    const c = el('div', 'box');
-    c.innerHTML = '<h2>모으면 좋을 자료</h2><div class="muted">' + r.suggest_collect + '</div>';
+    const c = el('div', 'note');
+    c.innerHTML = '<b>모으면 좋을 자료</b><br>' + r.suggest_collect;
     $('#qout').appendChild(c);
   }
   if (r.answer) {
-    const f = el('div', 'box');
-    f.innerHTML = '<h2>답변 다루기</h2>' +
-      '<div class="muted">여러 페이지를 종합해 <b>새로운 연결</b>을 만들었을 때만 저장한다.</div>' +
-      '<div style="display:flex;gap:8px;margin-top:9px">' +
-      '<button class="act" id="qsave">Output/ 에 저장</button>' +
-      '<button class="act" id="qcopy">복사</button>' +
-      '<button class="act" id="qretry">다시 질문</button></div>' +
-      '<span id="qsaved" class="muted" style="margin-left:9px"></span>';
+    const f = el('div', 'note');
+    f.style.cssText = 'display:flex;gap:8px;align-items:center;border:0;padding:0;margin:4px 0 26px';
+    const mk = (label, fn) => { const b = el('button', 'act', label); b.onclick = fn; return b; };
+    const msg = el('span', 'muted');
+    f.appendChild(mk('Output/ 에 저장', async e => {
+      e.target.disabled = true;
+      const x = await post('/query/save', { jid: t.jid || '' });
+      msg.textContent = x.ok ? ('저장됨 · ' + x.path) : x.error;
+      if (!x.ok) e.target.disabled = false;
+    }));
+    f.appendChild(mk('복사', async e => {
+      try { await navigator.clipboard.writeText(qAnswerBox(n).innerText);
+        e.target.textContent = '복사됨';
+        setTimeout(() => e.target.textContent = '복사', 1500);
+      } catch (_) { msg.textContent = '복사 실패 — 직접 드래그해서 복사하라'; }
+    }));
+    f.appendChild(mk('근거 보기', () => qSrcRender(n, t.sources || [])));
+    f.appendChild(msg);
     $('#qout').appendChild(f);
-    $('#qsave').onclick = async () => {
-      $('#qsave').disabled = true;
-      const x = await post('/query/save');
-      $('#qsaved').textContent = x.ok ? ('저장됨 · ' + x.path) : x.error;
-      if (!x.ok) $('#qsave').disabled = false;
-    };
-    $('#qcopy').onclick = async () => {
-      try { await navigator.clipboard.writeText(qAnswerBox().innerText);
-        $('#qcopy').textContent = '복사됨'; setTimeout(() => $('#qcopy').textContent = '복사', 1500);
-      } catch (_) { $('#qsaved').textContent = '복사 실패 — 직접 드래그해서 복사하라'; }
-    };
-    $('#qretry').onclick = () => { $('#qq').value = qLastQ; startQuery(); };
   }
-  if (r.usage) {
-    const u = el('div', 'note');
-    u.textContent = '입력 ' + r.usage.in + ' · 출력 ' + r.usage.out + ' 토큰';
-    $('#qout').appendChild(u);
-  }
-}
-let qLastResult = null;
-
-function qSrcOpen(on) {
-  $('#qshell').classList.toggle('src-open', on);
-  $('#qsrc-toggle').title = on ? '답변 근거 닫기' : '답변 근거 열기';
+  qScroll();
 }
 
 $('#qsrc-toggle').onclick = () => qSrcOpen(!$('#qshell').classList.contains('src-open'));
 $('#qsrc-close').onclick = () => qSrcOpen(false);
-
 $('#qform').onsubmit = e => { e.preventDefault(); startQuery(); };
-$('#qq').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startQuery(); } };
+$('#qq').onkeydown = e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startQuery(); } };
 $('#qstop').onclick = stopQuery;
 $('#qnew').onclick = () => {
+  // 새 질문 = 대화를 비우고 처음부터. 이어 묻는 것은 그냥 입력창에 쓰면 된다.
   if (qES) stopQuery();
+  Object.keys(T).forEach(k => {
+    if (T[k].thinkTimer) clearInterval(T[k].thinkTimer);
+    delete T[k];
+  });
+  qTurn = 0;
   $('#qq').value = '';
+  $('#qout').innerHTML = '';
   $('#qhead-title').textContent = '무엇을 확인하고 싶으신가요?';
   $('#qsrc-body').innerHTML = '<p class="muted">답변이 나오면 사용한 위키 페이지가 여기 표시된다.</p>';
   qSrcOpen(false);

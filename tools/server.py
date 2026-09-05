@@ -50,7 +50,10 @@ app.mount('/static', StaticFiles(directory=os.path.join(ROOT, 'tools', 'static')
 # 실행 중인 인제스트. 진행 상황 자체는 reports/ 의 파일이 정본이고,
 # 이 딕셔너리는 스레드를 붙잡아 두기 위한 것뿐이다.
 JOBS = {}
-LAST_Q = {}   # 직전 질의 결과. 저장 버튼이 이걸 쓴다
+LAST_Q = {}   # 직전 질의 결과. jid 없이 저장을 부르면 이걸 쓴다
+# 대화가 아래로 쌓이므로 턴마다 결과를 따로 들고 있어야 한다 —
+# 세 번째 답변을 보다가 첫 번째 답변을 저장할 수 있어야 하기 때문이다.
+RESULTS = {}
 
 # 실행 중인 질의(스트리밍). 답변 자체는 결과가 아니라 **진행 중인 과정**이라
 # reports/ 파일로 남기지 않는다 — 끝나면 의미가 없는 상태다. jid 하나당
@@ -562,6 +565,7 @@ def api_query_start(q: str = Form(...), use_raw: bool = Form(False),
                 on_event=lambda kind, data: qu.put((kind, data)),
                 cancel=cancel.is_set)
             LAST_Q['r'] = r
+            RESULTS[jid] = r
         except Exception as e:                       # noqa: BLE001
             qu.put(('error', {'error': str(e)[:400]}))
 
@@ -620,9 +624,12 @@ def api_query_stop(jid: str = Form(...)):
 
 
 @app.post('/api/query/save')
-def api_query_save():
-    """직전 답변을 Output/ 에 남긴다. SKILL.md: 저장은 확인 뒤에."""
-    r = LAST_Q.get('r')
+def api_query_save(jid: str = Form('')):
+    """답변을 Output/ 에 남긴다. SKILL.md: 저장은 확인 뒤에.
+
+    `jid` 를 주면 그 턴의 답변을, 안 주면 직전 답변을 저장한다.
+    """
+    r = RESULTS.get(jid) or LAST_Q.get('r')
     if not r:
         return JSONResponse({'error': '저장할 답변이 없다'}, status_code=400)
     try:

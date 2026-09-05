@@ -163,8 +163,28 @@ const fire = (t, d) => (listeners[t] || []).forEach(f => f({ data: JSON.stringif
     const fellBack = inner && inner.attrs && inner.attrs['data-markdown-fallback'];
     console.log('렌더 방식:', fellBack ? '평문 폴백' : '마크다운 렌더');
     console.log('인용 버튼 수:', findAllIn(out, '.ai-citation-ref').length);
-    if (text.includes('보상 해킹은')) console.log('==> 답변이 DOM 에 그려진다  OK');
-    else { console.log('==> 답변이 안 그려진다  실패'); process.exit(1); }
+    if (!text.includes('보상 해킹은')) { console.log('==> 답변이 안 그려진다  실패'); process.exit(1); }
+    console.log('==> 1번째 답변이 DOM 에 그려진다  OK');
+
+    // ── 두 번째 질문: 앞의 대화가 남아 있어야 한다 ──
+    fire('done', { answer: '보상 해킹은 규칙은 지키면서[1] 의도와 다른 결과를 내는 것이다.',
+                   sources: [{ ordinal: 1, page: '(AI보호) 보상 해킹', status: 'draft',
+                               level: 'warn', strength: '검증 필요' }],
+                   in_wiki: true, usage: { in: 1, out: 1 } });
+    registry.qq.value = '프롬프트 인젝션은?';
+    await ctx.startQuery();
+    fire('stage', { stage: '답변 작성', step: 2, of: 3 });
+    fire('token', { delta: '프롬프트 인젝션은 지시문을 조작하는 공격이다.' });
+    await new Promise(r => setTimeout(r, 200));
+
+    const t2 = registry.qout.textContent;
+    const keptFirst = t2.includes('보상 해킹은');
+    const hasSecond = t2.includes('프롬프트 인젝션은 지시문');
+    console.log('1번째 질문 남아있나:', t2.includes('보상 해킹이 뭐야?'));
+    console.log('1번째 답변 남아있나:', keptFirst);
+    console.log('2번째 답변 있나  :', hasSecond);
+    if (keptFirst && hasSecond) console.log('==> 대화가 아래로 쌓인다  OK');
+    else { console.log('==> 대화가 안 쌓인다  실패'); process.exit(1); }
   } catch (e) {
     console.log('처리 오류:', e.message);
     console.log(e.stack.split('\n').slice(1, 3).join('\n'));
