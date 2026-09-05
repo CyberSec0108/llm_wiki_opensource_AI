@@ -193,9 +193,9 @@
       <div class="box" style="margin-top:0">
         <input id="q" placeholder="검색 (본문까지)" style="margin-bottom:10px">
         <div class="chips" style="margin-bottom:6px">
-          <span class="chip on" data-L="">전체</span>
-          <span class="chip" data-L="wiki">위키</span>
-          <span class="chip" data-L="raw">원본</span>
+          <span class="chip on" data-layer="">전체</span>
+          <span class="chip" data-layer="wiki">위키</span>
+          <span class="chip" data-layer="raw">원본</span>
         </div>
         <div class="chips" style="margin-bottom:9px">
           <span class="chip on" data-f="">축 전체</span>
@@ -393,6 +393,8 @@ async function save(q) {
 }
 
 let PAGES = [], FILT = '', LAYER = '';
+const LAYNAME = { wiki: '위키', raw: '원본', context: '맥락', docs: '문서' };
+const layName = k => LAYNAME[k] || k;
 
 async function loadWiki() {
   // 위키와 원본을 한 목록에서 본다. 위키의 서술이 어디서 왔는지
@@ -403,11 +405,17 @@ async function loadWiki() {
 function drawList(hits) {
   const box = $('#plist'); box.innerHTML = '';
   if (hits) {
-    hits.forEach(h => { const d = el('div', 'item');
-      d.appendChild(el('div', '', h.name));
+    hits.filter(h => !LAYER || h.layer === LAYER).forEach(h => {
+      const d = el('div', 'item');
+      const r = el('div');
+      r.style.cssText = 'display:flex;align-items:center;gap:7px';
+      r.appendChild(el('span', 'lay lay-' + h.layer,
+        layName(h.layer)));
+      r.appendChild(el('span', '', h.name));
+      d.appendChild(r);
       d.appendChild(el('small', '', h.folder + (h.hits ? ' · ' + h.hits + '회' : '') +
         (h.snippet ? ' · ' + h.snippet : '')));
-      if (h.openable) d.onclick = () => openPage(h.name);
+      if (h.openable) d.onclick = () => openPage(h.path || h.name);
       box.appendChild(d); });
     if (!hits.length) box.innerHTML = '<div class="muted">결과 없음</div>';
     return;
@@ -418,7 +426,7 @@ function drawList(hits) {
     const d = el('div', 'item'); d.dataset.n = p.path || p.name;
     const h = el('div');
     h.style.cssText = 'display:flex;align-items:center;gap:7px';
-    h.appendChild(el('span', 'lay lay-' + p.layer, p.layer === 'raw' ? '원본' : '위키'));
+    h.appendChild(el('span', 'lay lay-' + p.layer, layName(p.layer)));
     h.appendChild(el('span', '', p.name));
     d.appendChild(h);
     d.appendChild(el('small', '', p.sub || p.status));
@@ -434,7 +442,7 @@ async function openPage(name) {
   if (!d.ok) { $('#pbody').textContent = d.error; return; }
   const h = $('#phead'); h.innerHTML = '';
   const t = el('div'); t.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
-  t.appendChild(el('span', 'lay lay-' + d.layer, d.layer === 'raw' ? '원본' : '위키'));
+  t.appendChild(el('span', 'lay lay-' + d.layer, layName(d.layer)));
   t.appendChild(el('b', '', d.name));
   if (d.meta.status) t.appendChild(el('span', 'pill', d.meta.status));
   if (d.layer === 'raw') {
@@ -466,9 +474,12 @@ document.querySelectorAll('[data-f]').forEach(c => c.onclick = () => {
   document.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === c));
   FILT = c.dataset.f; $('#q').value = ''; drawList(); });
 
-document.querySelectorAll('[data-L]').forEach(c => c.onclick = () => {
-  document.querySelectorAll('[data-L]').forEach(x => x.classList.toggle('on', x === c));
-  LAYER = c.dataset.L; $('#q').value = ''; drawList(); });
+document.querySelectorAll('[data-layer]').forEach(c => c.onclick = () => {
+  document.querySelectorAll('[data-layer]').forEach(x => x.classList.toggle('on', x === c));
+  LAYER = c.dataset.layer;
+  const v = $('#q').value.trim();
+  if (v) get('/search?q=' + encodeURIComponent(v)).then(drawList);
+  else drawList(); });
 
 let qt;
 $('#q').oninput = e => { clearTimeout(qt); const v = e.target.value.trim();

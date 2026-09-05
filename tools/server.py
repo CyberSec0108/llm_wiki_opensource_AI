@@ -396,8 +396,11 @@ def api_search(q: str):
             snip = ''
             if idx >= 0:
                 snip = ' '.join(s2[max(0, idx - 60):idx + 90].split())
+            rel2 = os.path.relpath(p2, ROOT).replace(chr(92), '/')
+            # 뷰어는 raw 도 연다. 원본은 경로로 열어야 같은 이름 충돌이 없다
             hits.append({'name': b, 'folder': folder, 'hits': n, 'snippet': snip,
-                         'openable': folder in ('wiki', 'context', 'docs')})
+                         'layer': rel2.split('/')[0], 'path': rel2,
+                         'openable': True})
     return sorted(hits, key=lambda x: -x['hits'])[:40]
 
 
