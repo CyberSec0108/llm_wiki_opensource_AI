@@ -303,8 +303,9 @@ def chat_json(system, user, max_tokens=None, schema=None):
     LAST_RAW['text'] = text
     if not (text or '').strip():
         raise RuntimeError(
-            '모델이 빈 응답을 돌려줬다. max_tokens 를 늘리거나 모델을 바꿔라 — '
-            '추론 모델은 추론 토큰이 max_tokens 를 먹는다.')
+            '모델이 빈 응답을 돌려줬다 (max_tokens=%s). 늘리거나 모델을 바꿔라 — '
+            '추론 모델은 추론 토큰이 max_tokens 를 먹는다.'
+            % (max_tokens or load_config()['max_tokens']))
     try:
         return json.loads(_unfence(text)), usage
     except ValueError:

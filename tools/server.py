@@ -26,12 +26,14 @@ PREFIX_AXIS = {'ai-for-security': '(AI활용)', 'securing-ai': '(AI보호)',
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import llm       # noqa: E402  제공자 계층
 import ingest    # noqa: E402  인제스트 파이프라인
+import query     # noqa: E402  질의 파이프라인
 
 app = FastAPI(title='LLM Wiki')
 
 # 실행 중인 인제스트. 진행 상황 자체는 reports/ 의 파일이 정본이고,
 # 이 딕셔너리는 스레드를 붙잡아 두기 위한 것뿐이다.
 JOBS = {}
+LAST_Q = {}   # 직전 질의 결과. 저장 버튼이 이걸 쓴다
 
 
 def rd(p):
@@ -511,6 +513,32 @@ def api_review():
     op = re.findall(r'^- \[ \] (.+)$', t, re.M)
     return {'open': op, 'done': len(re.findall(r'^- \[x\]', t, re.M)),
             'exists': True}
+
+
+@app.post('/api/query')
+def api_query(q: str = Form(...), use_raw: bool = Form(False)):
+    """위키를 근거로 답한다. 오래 걸리므로 UI는 기다리는 표시를 낸다."""
+    st = llm.status()
+    if not st['ok']:
+        return JSONResponse({'error': st['why'], 'llm': st}, status_code=400)
+    try:
+        r = query.run(q, use_raw=use_raw)
+    except Exception as e:                           # noqa: BLE001
+        return JSONResponse({'error': str(e)[:400]}, status_code=500)
+    LAST_Q['r'] = r
+    return r
+
+
+@app.post('/api/query/save')
+def api_query_save():
+    """직전 답변을 Output/ 에 남긴다. SKILL.md: 저장은 확인 뒤에."""
+    r = LAST_Q.get('r')
+    if not r:
+        return JSONResponse({'error': '저장할 답변이 없다'}, status_code=400)
+    try:
+        return {'ok': True, 'path': query.save(r)}
+    except SystemExit as e:
+        return JSONResponse({'ok': False, 'error': str(e)}, status_code=400)
 
 
 @app.get('/', response_class=HTMLResponse)

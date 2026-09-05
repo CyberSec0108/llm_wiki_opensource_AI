@@ -109,6 +109,14 @@
     color:var(--dim);flex:none;line-height:1.6}
   .lay-raw{border-color:var(--warn);color:var(--warn)}
   .lay-wiki{border-color:var(--acc);color:var(--acc)}
+  .st{font-size:10px;padding:1px 7px;border-radius:9px;border:1px solid;flex:none}
+  .st-ok{border-color:var(--a);color:var(--a)}
+  .st-warn{border-color:var(--warn);color:var(--warn)}
+  .st-err{border-color:var(--err);color:var(--err)}
+  .src{display:flex;align-items:center;gap:9px;padding:8px 0;
+    border-bottom:1px solid var(--line);font-size:12px}
+  .src:last-child{border-bottom:0}
+  .src a{cursor:pointer;color:var(--acc);text-decoration:none}
 </style>
 </head>
 <body>
@@ -121,6 +129,7 @@
     <button data-t="add">자료 넣기</button>
     <button data-t="wiki">위키</button>
     <button data-t="ing">인제스트</button>
+    <button data-t="q">질문</button>
     <button data-t="lint">점검</button>
   </nav>
 </header>
@@ -227,6 +236,22 @@
     <div class="box"><h2>리뷰 큐</h2><div id="review" class="muted"></div>
       <div class="note">자동으로 넘기지 않은 <b>판단이 필요한 것들.</b>
         인제스트를 막지 않는다 — 편할 때 처리하면 된다.</div></div>
+  </section>
+
+  <!-- 질문 -->
+  <section id="q">
+    <div class="box">
+      <input id="qq" placeholder="위키에게 물어본다 — 예: 프롬프트 인젝션을 어떻게 막나?">
+      <div style="display:flex;align-items:center;gap:10px;margin-top:9px">
+        <label class="muted" style="font-size:12px">
+          <input type="checkbox" id="qraw"> 원본(raw)까지 뒤진다</label>
+        <span class="grow"></span>
+        <button class="act pri" id="qgo">묻기</button>
+      </div>
+      <div class="note"><code>index</code>로 후보를 좁히고 <b>고른 페이지만</b> 읽는다.
+        위키 전체를 넣지 않으므로 싸고 근거가 명확하다.</div>
+    </div>
+    <div id="qout"></div>
   </section>
 
   <!-- 점검 -->
@@ -491,6 +516,123 @@ $('#q').oninput = e => { clearTimeout(qt); const v = e.target.value.trim();
 
 loadStatus(); loadStubs(); loadLint(); loadTags(); loadZotero(); loadWiki();
 drawIngest();
+/* ===== 질문 ===== */
+const STLABEL = { ok: '자유롭게 인용', warn: '검증 필요', err: '인용 금지' };
+
+async function ask() {
+  const v = $('#qq').value.trim();
+  if (!v) return;
+  $('#qgo').disabled = true; $('#qgo').textContent = '생각 중…';
+  $('#qout').innerHTML = '<div class="box muted">index로 후보를 좁히는 중… ' +
+    '(보통 2~4분 걸린다)</div>';
+  let r;
+  try {
+    r = await post('/query', { q: v, use_raw: $('#qraw').checked ? 'true' : 'false' });
+  } catch (e) { r = { error: String(e) }; }
+  $('#qgo').disabled = false; $('#qgo').textContent = '묻기';
+  drawAnswer(r);
+}
+
+function drawAnswer(r) {
+  const o = $('#qout'); o.innerHTML = '';
+  if (r.error) {
+    const x = el('div', 'warnbox'); x.textContent = r.error; o.appendChild(x); return;
+  }
+  // 위키에 없는 것을 있는 것처럼 섞지 않는다 — 먼저, 크게 보여준다
+  if (r.in_wiki === false) {
+    const w = el('div', 'warnbox');
+    w.innerHTML = '<b>위키에 없음</b><br>' + (r.missing || '이 볼트에 근거가 없다.');
+    o.appendChild(w);
+  }
+  if (r.answer) {
+    const a = el('div', 'box');
+    const d = el('div', 'doc'); d.innerHTML = mdLite(r.answer);
+    a.appendChild(d); o.appendChild(a);
+    d.querySelectorAll('a.wl').forEach(x => x.onclick = () => {
+      document.querySelector('[data-t=wiki]').click(); openPage(x.dataset.p); });
+  }
+  if ((r.sources || []).length) {
+    const b = el('div', 'box');
+    b.innerHTML = '<h2>근거 ' + r.sources.length + '개</h2>';
+    r.sources.forEach(s => {
+      const e = el('div', 'src');
+      e.innerHTML = '<span class="st st-' + s.level + '">' + s.status + '</span>' +
+        '<a class="grow" data-p="' + s.page + '">' + s.page + '</a>' +
+        '<span class="muted">' + (STLABEL[s.level] || '') +
+        (s.needs_source ? ' · 보강필요' : '') + (s.read ? '' : ' · 읽지 않음') + '</span>';
+      e.querySelector('a').onclick = () => {
+        document.querySelector('[data-t=wiki]').click(); openPage(s.page); };
+      b.appendChild(e);
+    });
+    if ((r.ghost_links || []).length)
+      b.innerHTML += '<div class="warnbox" style="margin-top:9px">' +
+        '<b>읽지 않은 페이지를 링크했다</b><br>' + r.ghost_links.join(', ') + '</div>';
+    o.appendChild(b);
+  }
+  if (r.suggest_collect) {
+    const c = el('div', 'box');
+    c.innerHTML = '<h2>모으면 좋을 자료</h2><div class="muted">' +
+      r.suggest_collect + '</div>';
+    o.appendChild(c);
+  }
+  if (r.answer) {
+    const f = el('div', 'box');
+    f.innerHTML = '<h2>위키에 되먹이기</h2>' +
+      '<div class="muted">여러 페이지를 종합해 <b>새로운 연결</b>을 만들었을 때만 저장한다. ' +
+      '한 페이지 내용을 옮긴 것이면 저장하지 않는다.</div>' +
+      '<button class="act" id="qsave" style="margin-top:9px">Output/ 에 저장</button>' +
+      '<span id="qsaved" class="muted" style="margin-left:9px"></span>';
+    o.appendChild(f);
+    $('#qsave').onclick = async () => {
+      $('#qsave').disabled = true;
+      const x = await post('/query/save');
+      $('#qsaved').textContent = x.ok ? ('저장됨 · ' + x.path) : x.error;
+      if (!x.ok) $('#qsave').disabled = false;
+    };
+  }
+  if (r.usage) {
+    const u = el('div', 'note');
+    u.textContent = '입력 ' + r.usage.in + ' · 출력 ' + r.usage.out + ' 토큰';
+    o.appendChild(u);
+  }
+}
+
+// 답변은 서버를 거치지 않으므로 최소한만 마크다운으로 만든다
+function mdLite(t) {
+  const esc = x => x.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const out = [];
+  let tbl = [];
+  const flush = () => {
+    if (!tbl.length) return;
+    const rows = tbl.filter(r => !/^\s*\|[\s|:-]+\|\s*$/.test(r));
+    out.push('<table>' + rows.map((r, i) => '<tr>' + r.replace(/^\||\|$/g, '')
+      .split('|').map(c => '<' + (i ? 'td' : 'th') + '>' + inl(esc(c.trim())) +
+      '</' + (i ? 'td' : 'th') + '>').join('') + '</tr>').join('') + '</table>');
+    tbl = [];
+  };
+  const inl = x => x
+    .replace(/\[\[([^\]|#]+?)\]\]/g, (m, p) => '<a class="wl" data-p="' + p + '">' + p + '</a>')
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+  t.split('\n').forEach(ln => {
+    if (/^\s*\|/.test(ln)) { tbl.push(ln.trim()); return; }
+    flush();
+    const h = ln.match(/^(#{1,4})\s+(.*)$/);
+    if (h) { out.push('<h' + (h[1].length + 1) + '>' + inl(esc(h[2])) +
+      '</h' + (h[1].length + 1) + '>'); return; }
+    if (/^\s*[-*]\s+/.test(ln)) { out.push('<li>' + inl(esc(ln.replace(/^\s*[-*]\s+/, ''))) + '</li>'); return; }
+    if (/^>\s?/.test(ln)) { out.push('<blockquote>' + inl(esc(ln.replace(/^>\s?/, ''))) + '</blockquote>'); return; }
+    if (/^---+$/.test(ln.trim())) { out.push('<hr>'); return; }
+    if (!ln.trim()) { out.push(''); return; }
+    out.push('<p>' + inl(esc(ln)) + '</p>');
+  });
+  flush();
+  return out.join('\n');
+}
+
+$('#qgo').onclick = ask;
+$('#qq').onkeydown = e => { if (e.key === 'Enter') ask(); };
+
 /* ===== 인제스트 ===== */
 const STEPS = ['읽기', '분석', '작성', '마무리'];
 let poll = null;
