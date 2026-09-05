@@ -19,6 +19,8 @@ desktop.ini
 .git_backup/
 .vscode/
 .idea/
+__pycache__/
+*.pyc
 *.tmp
 *.swp
 *~
