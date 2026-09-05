@@ -10,6 +10,7 @@
   :root{
     --bg:#f7f7f5; --card:#fff; --line:#e3e3df; --ink:#1f1f1d; --dim:#6b6b66;
     --a:#2d7d46; --b:#7b4fa8; --warn:#b26a00; --err:#c0392b; --acc:#2563eb;
+    --navy:#0d2233;
   }
   @media (prefers-color-scheme:dark){
     :root{--bg:#1a1a18;--card:#232320;--line:#38382f;--ink:#eceae4;--dim:#9a978e;}
@@ -19,17 +20,24 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
        font:14px/1.6 -apple-system,"Segoe UI","Malgun Gothic",sans-serif}
-  header{display:flex;align-items:center;gap:16px;padding:14px 22px;
-         border-bottom:1px solid var(--line);background:var(--card);
+  /* 앱 헤더 — Sec_AI 방식의 다크 네이비 바 (마크·부제는 넣지 않는다) */
+  header{display:flex;align-items:center;gap:14px;padding:0 26px;height:66px;
+         background:var(--navy);border-bottom:3px solid var(--acc);
          position:sticky;top:0;z-index:5}
-  header h1{font-size:15px;margin:0;font-weight:650;letter-spacing:-.01em}
-  header a.pill{text-decoration:none;cursor:pointer}
-  header a.pill:hover{border-color:var(--acc);color:var(--acc)}
+  header h1{color:#fff;font-size:15px;margin:0;font-weight:650;letter-spacing:-.01em}
+  header a.pill{text-decoration:none;cursor:pointer;border-color:#3d5a76;color:#c9dcec}
+  header a.pill:hover{border-color:#fff;color:#fff}
   a.pill:hover{border-color:var(--acc);color:var(--acc)}
-  nav{display:flex;gap:4px;margin-left:auto}
-  nav button{border:1px solid transparent;background:none;color:var(--dim);
-             padding:6px 13px;border-radius:7px;cursor:pointer;font-size:13px;font-family:inherit}
-  nav button.on{background:var(--bg);color:var(--ink);border-color:var(--line);font-weight:600}
+  nav{display:flex;align-items:center;gap:3px;margin-left:auto}
+  nav button{border:1px solid transparent;background:none;color:#c1d4e4;
+             padding:7px 12px;border-radius:6px;cursor:pointer;font-size:13px;
+             font-family:inherit;font-weight:600}
+  nav button:hover{background:#1a3c5a;color:#fff}
+  nav button.on{background:#fff;color:var(--navy)}
+  #themeToggle{width:38px;height:38px;padding:0;border-radius:50%;flex:none;
+    display:grid;place-items:center;background:transparent;border-color:#3d5a76;
+    color:#c9dcec;font-size:15px;margin-left:8px}
+  #themeToggle:hover{background:#1a3c5a;color:#fff;border-color:#3d5a76}
   main{max-width:1000px;margin:0 auto;padding:22px}
   main.wide{max-width:min(1500px,calc(100% - 48px))}
   section{display:none} section.on{display:block}
@@ -129,39 +137,94 @@
   .src:last-child{border-bottom:0}
   .src a{cursor:pointer;color:var(--acc);text-decoration:none}
 
-  /* 질문 탭 — 뷰포트에 맞춰 높이를 고정하고, 대화만 내부 스크롤한다.
-     구성은 [예시 칩](고정) → [대화 스크롤 영역](늘어남) → [입력창](고정),
-     Sec_AI의 3행 그리드(auto / 1fr / auto) 방식을 그대로 따른다. */
-  .qshell{display:grid;grid-template-columns:200px 1fr;gap:16px;
-    height:clamp(460px,calc(100vh - 150px),900px)}
-  @media(max-width:820px){.qshell{grid-template-columns:1fr;height:auto}}
-  .qhist{background:var(--card);border:1px solid var(--line);border-radius:11px;
-    padding:14px;height:100%;overflow-y:auto}
-  .qhist h2{font-size:12px;margin:0 0 10px;color:var(--dim);font-weight:600;
-    text-transform:uppercase;letter-spacing:.05em}
-  .qhist-row{padding:7px 9px;border-radius:7px;font-size:12.5px;color:var(--dim);
-    background:var(--bg);margin-top:7px;opacity:.65;cursor:not-allowed;position:relative}
-  .qhist-row .badge{position:absolute;right:8px;top:7px;font-size:9px;
-    border:1px solid var(--line);border-radius:8px;padding:0 5px;color:var(--dim)}
+  /* 질문 탭 — Sec_AI 의 3열 앱 셸.
+     [내 대화] | [질문과 답변] | [출처 드로어]
+     높이를 뷰포트에 고정하고 가운데 대화만 내부 스크롤한다. */
+  .qshell{display:grid;grid-template-columns:270px minmax(0,1fr);gap:0;
+    height:clamp(520px,calc(100vh - 130px),1000px);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    background:var(--card);box-shadow:0 1px 3px rgba(13,34,51,.06)}
+  .qshell.src-open{grid-template-columns:270px minmax(0,1fr) 310px}
+  @media(max-width:980px){.qshell,.qshell.src-open{grid-template-columns:1fr;height:auto}}
+
+  /* 왼쪽 — 내 대화 */
+  .qhist{background:var(--bg);border-right:1px solid var(--line);
+    padding:16px;height:100%;overflow-y:auto;display:flex;flex-direction:column}
+  .qhist-top{display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:12px}
+  .qhist-top h2{font-size:14px;margin:0;font-weight:650}
+  .qhist-top span{font-size:11.5px;color:var(--dim)}
+  .qhist .newbtn{width:100%;background:var(--acc);color:#fff;border-color:var(--acc);
+    font-weight:650;font-size:13px;padding:11px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;gap:7px}
+  .qhist label{margin:14px 0 5px;font-size:11.5px}
+  .qhist-row{padding:11px 12px;border-radius:8px;font-size:12.5px;color:var(--dim);
+    background:var(--card);border:1px solid var(--line);margin-top:8px;
+    opacity:.6;cursor:not-allowed;display:flex;align-items:center;gap:8px}
+  .qhist-row .badge{margin-left:auto;font-size:9.5px;border:1px solid var(--line);
+    border-radius:8px;padding:1px 6px;flex:none}
+
+  /* 가운데 — 질문과 답변 */
   .qmain{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100%;
-    background:var(--card);border:1px solid var(--line);border-radius:11px;overflow:hidden}
-  @media(max-width:820px){.qmain{height:auto;grid-template-rows:auto auto auto}}
-  .qexamples{margin:0 0 9px}
-  #qout{min-height:0;overflow-y:auto;padding:13px 15px;display:flex;flex-direction:column}
-  @media(max-width:820px){#qout{max-height:60vh}}
-  .qcomposer{padding:12px 15px 14px;border-top:1px solid var(--line);
-    background:var(--bg)}
-  .qcomposer textarea{min-height:52px}
-  .qcomposer-row{display:flex;align-items:center;gap:10px;margin-top:9px}
-  .qcomposer-row select{width:auto}
-  .qsteps-wrap{margin-bottom:2px;flex:none}
+    background:var(--card);overflow:hidden;min-width:0}
+  @media(max-width:980px){.qmain{height:auto;grid-template-rows:auto auto auto}}
+  .qhead{display:flex;align-items:flex-start;gap:12px;padding:16px 24px;
+    border-bottom:1px solid var(--line)}
+  .qhead-label{color:var(--acc);font-size:11.5px;font-weight:700;margin:0 0 3px}
+  .qhead h2{font-size:17px;margin:0;font-weight:650;letter-spacing:-.02em}
+  .qhead button{margin-left:auto;flex:none;width:36px;height:36px;padding:0;
+    display:grid;place-items:center;border-radius:8px}
+  #qout{min-height:0;overflow-y:auto;padding:22px 26px;
+    display:flex;flex-direction:column}
+  @media(max-width:980px){#qout{max-height:62vh}}
+
+  /* 환영 화면 — 예시 질문을 가운데 큰 버튼으로 */
+  .qwelcome{max-width:620px;margin:60px auto 30px;display:grid;gap:10px}
+  .qwelcome strong{text-align:center;font-size:14px;margin-bottom:6px}
+  .qwelcome button{width:100%;text-align:left;padding:13px 16px;border-radius:9px;
+    border:1px solid var(--line);background:var(--card);color:var(--acc);
+    font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit}
+  .qwelcome button:hover{background:color-mix(in srgb,var(--acc) 8%,transparent)}
+
+  /* 입력창 — 둥근 shell 안에 textarea, 오른쪽에 원형 전송 버튼 */
+  .qcomposer{padding:14px 26px 18px;
+    background:linear-gradient(180deg,transparent,var(--card) 30%)}
+  .qcomposer-shell{position:relative;display:flex;align-items:flex-end;
+    min-height:66px;padding:10px 200px 10px 16px;border:1px solid var(--line);
+    border-radius:24px;background:var(--bg);box-shadow:0 8px 24px rgba(13,34,51,.08)}
+  .qcomposer textarea{min-height:44px;max-height:130px;padding:8px 2px;resize:none;
+    border:0;background:transparent;line-height:1.55}
+  .qcomposer textarea:focus{border:0;outline:0}
+  .qcomposer-controls{position:absolute;right:10px;bottom:10px;
+    display:flex;align-items:center;gap:6px}
+  .qcomposer-controls select{width:auto;max-width:150px;height:38px;padding:0 10px;
+    border-radius:999px;background:var(--card);font-size:12px}
+  .qcomposer-controls .act{min-height:38px;border-radius:999px;font-size:12px}
+  .qsend{display:inline-grid;place-items:center;width:42px;min-width:42px;height:42px;
+    padding:0;border-radius:50%;background:var(--acc);color:#fff;border:1px solid var(--acc);
+    cursor:pointer}
+  .qsend svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round}
+  .qsend:disabled{opacity:.45;cursor:not-allowed}
+
+  /* 오른쪽 — 출처 드로어 */
+  .qsrc{background:var(--bg);border-left:1px solid var(--line);padding:16px 18px;
+    height:100%;overflow-y:auto;display:none}
+  .qshell.src-open .qsrc{display:block}
+  @media(max-width:980px){.qshell.src-open .qsrc{display:block;border-left:0;
+    border-top:1px solid var(--line)}}
+  .qsrc-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .qsrc-top p{color:var(--acc);font-size:11.5px;font-weight:700;margin:0}
+  .qsrc-top h2{font-size:15px;margin:0;font-weight:650}
+  .qsrc-close{margin-left:auto;width:28px;height:28px;padding:0;border-radius:7px;
+    display:grid;place-items:center}
+
   .msg-user{align-self:flex-end;max-width:80%;background:var(--acc);color:#fff;
-    border-radius:14px 14px 3px 14px;padding:9px 14px;margin-bottom:12px;
-    font-size:13.5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
-  .ans{background:var(--card);border:1px solid var(--line);border-radius:11px;
-    padding:15px 17px;margin-bottom:14px;line-height:1.75;flex:none}
+    border-radius:14px 14px 3px 14px;padding:10px 15px;margin-bottom:14px;
+    font-size:13.5px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+  .ans{margin-bottom:14px;line-height:1.75;flex:none;max-width:min(780px,92%)}
   .ans p{margin:8px 0}
-  #qout>.box{flex:none}
+  #qout>.box,#qout>.gen,#qout>.think,#qout>.warnbox,#qout>.note{flex:none}
   .src.hl{background:color-mix(in srgb,var(--acc) 12%,transparent);border-radius:6px}
 
   /* 진행 인디케이터 — Sec_AI 의 세로 리스트 방식(가로 막대가 아니다).
@@ -335,38 +398,68 @@
 
   <!-- 질문 -->
   <section id="query">
-    <div class="qshell">
+    <div class="qshell" id="qshell">
+      <!-- 왼쪽: 내 대화 (목업 — 저장 기능은 아직 없다) -->
       <aside class="qhist">
-        <h2>내 대화</h2>
-        <button class="act" id="qnew" style="width:100%">+ 새 질문</button>
-        <div class="muted" style="font-size:11px;margin-top:9px">
-          대화 기록 저장은 아직 지원하지 않는다. 아래는 준비 중인 모습이다.</div>
-        <div class="qhist-row" aria-disabled="true">프롬프트 인젝션 방어<span class="badge">준비중</span></div>
-        <div class="qhist-row" aria-disabled="true">Sysmon 온톨로지<span class="badge">준비중</span></div>
+        <div class="qhist-top">
+          <h2>내 대화</h2><span id="qhist-count">0건</span>
+        </div>
+        <button class="act newbtn" id="qnew">＋ 새 질문</button>
+        <label for="qhist-search">대화 검색</label>
+        <input id="qhist-search" placeholder="제목으로 찾기" disabled>
+        <label for="qhist-filter">목록</label>
+        <select id="qhist-filter" disabled>
+          <option>사용 중인 대화</option>
+        </select>
+        <div class="qhist-row">프롬프트 인젝션 방어<span class="badge">준비중</span></div>
+        <div class="qhist-row">Sysmon 온톨로지<span class="badge">준비중</span></div>
+        <div class="note" style="margin-top:auto;font-size:11px">
+          대화 기록 저장은 아직 없다. 위는 준비 중인 모습이다.</div>
       </aside>
 
+      <!-- 가운데: 질문과 답변 -->
       <div class="qmain">
+        <div class="qhead">
+          <div>
+            <p class="qhead-label">질문과 답변</p>
+            <h2 id="qhead-title">무엇을 확인하고 싶으신가요?</h2>
+          </div>
+          <button class="act" id="qsrc-toggle" title="답변 근거 열기">▤</button>
+        </div>
+
         <div id="qout"></div>
 
         <form class="qcomposer" id="qform">
-          <div class="chips qexamples" id="qexamples"></div>
-          <textarea id="qq" rows="2"
-            placeholder="위키에게 물어본다 — 예: 프롬프트 인젝션을 어떻게 막나? (Shift+Enter로 줄바꿈)"></textarea>
-          <div class="qcomposer-row">
-            <select id="qprofile" title="답변 방식">
-              <option value="fast">빠른 답변 (2쪽)</option>
-              <option value="precise" selected>자세한 답변 (4쪽 + 원본)</option>
-            </select>
-            <span class="grow"></span>
-            <button type="button" class="act" id="qstop" hidden>■ 중단</button>
-            <button type="submit" class="act pri" id="qgo">묻기</button>
+          <div class="qcomposer-shell">
+            <textarea id="qq" rows="2"
+              placeholder="무엇이든 물어보세요 (Shift+Enter로 줄바꿈)"></textarea>
+            <div class="qcomposer-controls">
+              <select id="qprofile" title="답변 방식">
+                <option value="fast">빠른 답변</option>
+                <option value="precise" selected>자세한 답변</option>
+              </select>
+              <button type="button" class="act" id="qstop" hidden>■ 중단</button>
+              <button type="submit" class="qsend" id="qgo" title="질문 보내기">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/></svg>
+              </button>
+            </div>
           </div>
         </form>
       </div>
+
+      <!-- 오른쪽: 답변 근거 -->
+      <aside class="qsrc" id="qsrc">
+        <div class="qsrc-top">
+          <div>
+            <p>답변 근거</p>
+            <h2>출처</h2>
+          </div>
+          <button class="act qsrc-close" id="qsrc-close" title="닫기">×</button>
+        </div>
+        <div id="qsrc-body"><p class="muted">답변이 나오면 사용한 위키 페이지가 여기 표시된다.</p></div>
+      </aside>
     </div>
-    <div class="note"><code>index</code>로 후보를 좁히고 <b>고른 페이지만</b> 읽는다 —
-      위키 전체를 넣지 않으므로 싸고 근거가 명확하다. 인용은 번호로 한다 —
-      문장의 <code>[1]</code>을 누르면 아래 근거로 이동한다.</div>
   </section>
 
   <!-- 점검 -->
@@ -654,22 +747,20 @@ const QEXAMPLES = [
 ];
 let qES = null, qJID = null, qLastQ = '', qCiteMap = {}, qAllowedIds = [];
 
-function qCandidateBox() {
-  let box = document.getElementById('qcandidates');
-  if (!box) {
-    box = el('div', 'box'); box.id = 'qcandidates';
-    $('#qout').appendChild(box);
-  }
-  return box;
-}
-
-function drawExamples() {
-  const box = $('#qexamples'); box.innerHTML = '';
+function drawWelcome() {
+  // Sec_AI 의 chat-welcome — 대화가 비었을 때만 가운데에 큰 예시 버튼을 놓는다
+  const box = $('#qout');
+  if (box.querySelector('.msg-user')) return;
+  box.innerHTML = '';
+  const w = el('div', 'qwelcome');
+  w.appendChild(el('strong', '', '이렇게 물어보세요'));
   QEXAMPLES.forEach(ex => {
-    const c = el('span', 'chip', ex);
-    c.onclick = () => { $('#qq').value = ex; startQuery(); };
-    box.appendChild(c);
+    const b = el('button', '', ex);
+    b.type = 'button';
+    b.onclick = () => { $('#qq').value = ex; startQuery(); };
+    w.appendChild(b);
   });
+  box.appendChild(w);
 }
 
 function qSteps(stepIdx, done) {
@@ -764,6 +855,7 @@ async function startQuery() {
   qLastQ = v;
   $('#qout').innerHTML = '';
   $('#qout').appendChild(el('div', 'msg-user', v));
+  $('#qhead-title').textContent = v.length > 46 ? v.slice(0, 46) + '…' : v;
   $('#qgo').disabled = true; $('#qstop').hidden = false;
   qSteps(0);
   const profile = $('#qprofile').value;
@@ -784,19 +876,23 @@ async function startQuery() {
   });
   qES.addEventListener('candidates', e => {
     // 스트리밍이 시작되기 전에 순번표를 미리 받는다 — 그래야 [1][2]가
-    // 타이핑되는 동안에도 클릭 가능한 버튼으로 보인다 (텍스트로만 남지 않는다).
+    // 타이핑되는 동안에도 클릭 가능한 버튼으로 보인다.
     const pages = JSON.parse(e.data).pages || [];
     qAllowedIds = pages.map(p => '[' + p.ordinal + ']');
     if (!pages.length) return;
-    const b = qCandidateBox();
-    b.innerHTML = '<h2>읽는 중 ' + pages.length + '쪽</h2>';
+    const sb = $('#qsrc-body');
+    sb.innerHTML = '<p class="muted" style="margin:0 0 10px">읽는 중 ' +
+      pages.length + '쪽 — 답변이 끝나면 실제 인용만 남는다</p>';
     pages.forEach(p => {
-      const row = el('div', 'src'); row.dataset.n = p.ordinal;
-      row.innerHTML = '<span class="pill">[' + p.ordinal + ']</span>' +
-        '<span class="grow muted">' + p.page + '</span>';
-      qCiteMap[p.ordinal] = row;
-      b.appendChild(row);
+      const card = el('div', 'scard'); card.dataset.n = p.ordinal;
+      const head = el('div', 'scard-head');
+      head.appendChild(el('span', 'scard-num', '[' + p.ordinal + ']'));
+      head.appendChild(el('strong', '', p.page));
+      card.appendChild(head);
+      qCiteMap[p.ordinal] = card;
+      sb.appendChild(card);
     });
+    qSrcOpen(true);
   });
   qES.addEventListener('reasoning', e => {
     qThinkAppend(JSON.parse(e.data).delta || '');
@@ -884,11 +980,11 @@ function finishAnswer(r) {
     w.innerHTML = '<b>위키에 없음</b><br>' + (r.missing || '이 볼트에 근거가 없다.');
     $('#qout').insertBefore(w, $('#qout').firstChild.nextSibling || null);
   }
+  const sb = $('#qsrc-body');
+  sb.innerHTML = '';
   if ((r.sources || []).length) {
-    const b = el('div', 'box');
-    b.innerHTML = '<h2>답변 근거 ' + r.sources.length + '개</h2>';
     r.sources.forEach(s => {
-      // Sec_AI 의 chat-source-card 구조: [번호] 제목 / 메타 한 줄 / 열기 링크
+      // Sec_AI 의 chat-source-card: [번호] 제목 / 메타 / 열기 링크
       const card = el('div', 'scard'); card.dataset.n = s.ordinal;
       const head = el('div', 'scard-head');
       head.appendChild(el('span', 'scard-num', '[' + s.ordinal + ']'));
@@ -902,12 +998,16 @@ function finishAnswer(r) {
       a.onclick = () => { document.querySelector('[data-t=wiki]').click(); openPage(s.page); };
       card.appendChild(a);
       qCiteMap[s.ordinal] = card;
-      b.appendChild(card);
+      sb.appendChild(card);
     });
-    if ((r.ghost_citations || []).length)
-      b.innerHTML += '<div class="warnbox" style="margin-top:9px">' +
-        '<b>범위 밖 인용 번호를 썼다</b> — [' + r.ghost_citations.join('], [') + ']</div>';
-    $('#qout').appendChild(b);
+    if ((r.ghost_citations || []).length) {
+      const g = el('div', 'warnbox'); g.style.marginTop = '10px';
+      g.innerHTML = '<b>범위 밖 인용 번호</b><br>[' + r.ghost_citations.join('], [') + ']';
+      sb.appendChild(g);
+    }
+    qSrcOpen(true);   // 근거가 생기면 드로어를 연다
+  } else {
+    sb.appendChild(el('p', 'muted', '이 답변은 위키 페이지를 인용하지 않았다.'));
   }
   if (r.suggest_collect) {
     const c = el('div', 'box');
@@ -945,14 +1045,27 @@ function finishAnswer(r) {
 }
 let qLastResult = null;
 
+function qSrcOpen(on) {
+  $('#qshell').classList.toggle('src-open', on);
+  $('#qsrc-toggle').title = on ? '답변 근거 닫기' : '답변 근거 열기';
+}
+
+$('#qsrc-toggle').onclick = () => qSrcOpen(!$('#qshell').classList.contains('src-open'));
+$('#qsrc-close').onclick = () => qSrcOpen(false);
+
 $('#qform').onsubmit = e => { e.preventDefault(); startQuery(); };
 $('#qq').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startQuery(); } };
 $('#qstop').onclick = stopQuery;
 $('#qnew').onclick = () => {
   if (qES) stopQuery();
-  $('#qq').value = ''; $('#qout').innerHTML = ''; $('#qq').focus();
+  $('#qq').value = '';
+  $('#qhead-title').textContent = '무엇을 확인하고 싶으신가요?';
+  $('#qsrc-body').innerHTML = '<p class="muted">답변이 나오면 사용한 위키 페이지가 여기 표시된다.</p>';
+  qSrcOpen(false);
+  drawWelcome();
+  $('#qq').focus();
 };
-drawExamples();
+drawWelcome();
 
 /* ===== 인제스트 ===== */
 const STEPS = ['읽기', '분석', '작성', '마무리'];
