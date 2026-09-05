@@ -242,6 +242,88 @@ def chat(system, user, max_tokens=None, cache_system=True, schema=None):
     return _openai_call(cl, kw)
 
 
+def chat_stream(system, user, max_tokens=None, on_delta=None, cancel=None,
+                cache_system=True):
+    """토큰 단위로 스트리밍한다. **스키마를 쓰지 않는다** — 순수 텍스트만.
+
+    JSON 스키마와 스트리밍은 같이 못 쓴다. 완성되기 전 JSON은 파싱할 수 없어서
+    부분 문자열을 화면에 보여줄 방법이 없기 때문이다. 그래서 질문 탭은
+    답변 본문은 이 함수로 스트리밍하고, 출처·판단(in_wiki 등)은 답변이 끝난
+    뒤 짧은 스키마 호출로 따로 뽑는다 (`tools/query.py`의 EXTRACT 단계).
+
+    `cancel()`이 True를 돌려주면 그 자리에서 스트림을 끊는다 — 클라이언트가
+    끊었다고 표시만 하는 게 아니라 **실제로 연결을 닫아 과금을 멈춘다.**
+
+    반환: (전체 텍스트, usage, 중단 여부)
+    """
+    on_delta = on_delta or (lambda d: None)
+    cancel = cancel or (lambda: False)
+    c = load_config()
+    p = PROVIDERS[c['provider']]
+    key = api_key(c['provider'])
+    if not key:
+        raise RuntimeError(p['env'] + ' 가 비어 있다. ' + ENV + ' 를 열어 채워라. '
+                           '키 발급: ' + p['signup'])
+    mt = max_tokens or c['max_tokens']
+    parts, cancelled = [], False
+
+    if p['sdk'] == 'anthropic':
+        import anthropic
+        cl = anthropic.Anthropic(api_key=key, timeout=c['timeout'])
+        sys_blocks = [{'type': 'text', 'text': system}]
+        if cache_system:
+            sys_blocks[0]['cache_control'] = {'type': 'ephemeral'}
+        with cl.messages.stream(model=c['model'], max_tokens=mt,
+                                system=sys_blocks,
+                                messages=[{'role': 'user', 'content': user}]) as stream:
+            for delta in stream.text_stream:
+                if cancel():
+                    cancelled = True
+                    break
+                parts.append(delta)
+                on_delta(delta)
+            if cancelled:
+                return ''.join(parts), {'in': 0, 'out': 0, 'cache_read': 0}, True
+            final = stream.get_final_message()
+            u = final.usage
+            return ''.join(parts), {'in': u.input_tokens, 'out': u.output_tokens,
+                                    'cache_read': getattr(u, 'cache_read_input_tokens', 0)}, False
+
+    # OpenRouter — OpenAI 호환 스펙
+    from openai import OpenAI
+    cl = OpenAI(base_url=p['base_url'], api_key=key,
+                timeout=c['timeout'], max_retries=1)
+    stream = cl.chat.completions.create(
+        model=c['model'], max_tokens=mt, temperature=c['temperature'],
+        messages=[{'role': 'system', 'content': system},
+                  {'role': 'user', 'content': user}],
+        stream=True, stream_options={'include_usage': True},
+        extra_headers={'HTTP-Referer': 'https://github.com/CyberSec0108/llm_wiki_opensource_AI',
+                       'X-Title': 'LLM Wiki'},
+    )
+    usage = {'in': 0, 'out': 0, 'cache_read': 0}
+    try:
+        for chunk in stream:
+            if cancel():
+                cancelled = True
+                break
+            if chunk.choices and chunk.choices[0].delta.content:
+                d = chunk.choices[0].delta.content
+                parts.append(d)
+                on_delta(d)
+            if getattr(chunk, 'usage', None):
+                u = chunk.usage
+                usage = {'in': u.prompt_tokens, 'out': u.completion_tokens, 'cache_read': 0}
+    finally:
+        # 클라이언트가 끊었으면 연결도 닫는다 — 안 그러면 서버가 계속 생성하고
+        # 계속 과금된다. "중단"이 실제로 멈추는 게 아니라 화면만 멈추면 안 된다.
+        try:
+            stream.close()
+        except Exception:                             # noqa: BLE001
+            pass
+    return ''.join(parts), usage, cancelled
+
+
 def _openai_call(cl, kw):
     r = cl.chat.completions.create(**kw)
     u = getattr(r, 'usage', None)

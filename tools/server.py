@@ -13,9 +13,10 @@
     python tools/server.py --port 8000
     python tools/server.py --lan            같은 와이파이의 다른 기기에서 접속
 """
-import io, os, re, sys, json, glob, shutil, sqlite3, tempfile, subprocess, datetime, threading
+import io, os, re, sys, json, glob, shutil, sqlite3, tempfile, subprocess, datetime, threading, queue
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NL = chr(10)
@@ -29,11 +30,17 @@ import ingest    # noqa: E402  인제스트 파이프라인
 import query     # noqa: E402  질의 파이프라인
 
 app = FastAPI(title='LLM Wiki')
+app.mount('/static', StaticFiles(directory=os.path.join(ROOT, 'tools', 'static')), name='static')
 
 # 실행 중인 인제스트. 진행 상황 자체는 reports/ 의 파일이 정본이고,
 # 이 딕셔너리는 스레드를 붙잡아 두기 위한 것뿐이다.
 JOBS = {}
 LAST_Q = {}   # 직전 질의 결과. 저장 버튼이 이걸 쓴다
+
+# 실행 중인 질의(스트리밍). 답변 자체는 결과가 아니라 **진행 중인 과정**이라
+# reports/ 파일로 남기지 않는다 — 끝나면 의미가 없는 상태다. jid 하나당
+# 이벤트 큐(SSE가 소비) + 취소 플래그(중단 버튼이 세팅) 한 쌍을 둔다.
+QSTREAMS = {}   # jid -> {'q': queue.Queue, 'cancel': threading.Event}
 
 
 def rd(p):
@@ -515,18 +522,71 @@ def api_review():
             'exists': True}
 
 
-@app.post('/api/query')
-def api_query(q: str = Form(...), use_raw: bool = Form(False)):
-    """위키를 근거로 답한다. 오래 걸리므로 UI는 기다리는 표시를 낸다."""
+def _sse(event, data):
+    return 'event: ' + event + '\ndata: ' + json.dumps(data, ensure_ascii=False) + '\n\n'
+
+
+@app.post('/api/query/start')
+def api_query_start(q: str = Form(...), use_raw: bool = Form(False),
+                    max_pages: int = Form(4)):
+    """질의를 백그라운드로 시작한다. 실제 답변은 /query/events 로 스트리밍된다.
+
+    긴 작업이라 요청 안에서 끝내면 브라우저가 먼저 끊긴다 — 인제스트와 같은 이유.
+    """
     st = llm.status()
     if not st['ok']:
         return JSONResponse({'error': st['why'], 'llm': st}, status_code=400)
-    try:
-        r = query.run(q, use_raw=use_raw)
-    except Exception as e:                           # noqa: BLE001
-        return JSONResponse({'error': str(e)[:400]}, status_code=500)
-    LAST_Q['r'] = r
-    return r
+    jid = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    qu, cancel = queue.Queue(), threading.Event()
+    QSTREAMS[jid] = {'q': qu, 'cancel': cancel}
+
+    def work():
+        try:
+            r = query.run_stream(
+                q, use_raw=use_raw, max_pages=max_pages,
+                on_event=lambda kind, data: qu.put((kind, data)),
+                cancel=cancel.is_set)
+            LAST_Q['r'] = r
+        except Exception as e:                       # noqa: BLE001
+            qu.put(('error', {'error': str(e)[:400]}))
+
+    threading.Thread(target=work, daemon=True).start()
+    return {'jid': jid}
+
+
+@app.get('/api/query/events')
+def api_query_events(jid: str):
+    """SSE로 진행 단계·토큰·최종 결과를 흘려보낸다."""
+    st = QSTREAMS.get(jid)
+    if not st:
+        return JSONResponse({'error': '없는 작업'}, status_code=404)
+
+    def gen():
+        try:
+            while True:
+                kind, data = st['q'].get(timeout=310)  # LLM_TIMEOUT(300)보다 여유
+                yield _sse(kind, data)
+                if kind in ('done', 'error', 'cancelled'):
+                    break
+        except queue.Empty:
+            yield _sse('error', {'error': '응답 시간 초과'})
+        finally:
+            QSTREAMS.pop(jid, None)
+
+    return StreamingResponse(gen(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache',
+                                      'X-Accel-Buffering': 'no'})
+
+
+@app.post('/api/query/stop')
+def api_query_stop(jid: str = Form(...)):
+    """진짜 중단이다 — 플래그만 세우는 게 아니라, chat_stream이 다음 청크에서
+    이 플래그를 보고 실제로 연결을 닫아 과금을 멈춘다."""
+    st = QSTREAMS.get(jid)
+    if not st:
+        return JSONResponse({'ok': False, 'error': '없는 작업(이미 끝났을 수 있다)'}, 404)
+    st['cancel'].set()
+    return {'ok': True}
 
 
 @app.post('/api/query/save')

@@ -66,6 +66,15 @@ ANSWER_SCHEMA = _obj({
     'suggest_collect': S,
 })
 
+# 스트리밍 경로(run_stream)가 쓰는 스키마. 답변 본문은 스키마 없이 스트리밍하고,
+# 스트리밍이 끝난 뒤 이 작은 스키마로 판단(위키에 있었나·뭐가 빠졌나)만 뽑는다 —
+# 전체 페이지를 다시 보내지 않으므로 이 호출은 싸다.
+EXTRACT_SCHEMA = _obj({
+    'in_wiki': {'type': 'boolean'},
+    'missing': S,
+    'suggest_collect': S,
+})
+
 
 def rd(p):
     return io.open(p, encoding='utf-8').read()
@@ -143,7 +152,7 @@ PICK = """질문: %(q)s
 
 이 질문에 답하려면 **어느 페이지를 읽어야 하는가.** 아직 답하지 마라.
 
-- 최대 4개까지 고른다. 위키 전체를 읽지 않는 것이 목적이다.
+- 최대 %(max)s개까지 고른다. 위키 전체를 읽지 않는 것이 목적이다.
 - 목록에 **정확히 있는 이름**만 쓴다. 지어내지 마라.
 - 별칭(한국어·영어·약어)도 살펴 고른다.
 - 답할 근거가 될 만한 페이지가 하나도 없으면 `in_wiki` 를 false 로 하고
@@ -175,7 +184,8 @@ def run(q, use_raw=False, on=None):
 
     on(stage='후보 선정', step=1, of=2)
     pick, u1 = llm.chat_json(system, PICK % {
-        'q': q, 'cat': cat, 'index': rd(idx) if os.path.exists(idx) else ''},
+        'q': q, 'cat': cat, 'max': 4,
+        'index': rd(idx) if os.path.exists(idx) else ''},
         max_tokens=8000, schema=PICK_SCHEMA)
 
     names = [n for n in (pick.get('pages') or []) if n in meta][:4]
@@ -234,6 +244,141 @@ def run(q, use_raw=False, on=None):
             'suggest_collect': ans.get('suggest_collect'),
             'usage': {k: u1.get(k, 0) + u2.get(k, 0) for k in set(u1) | set(u2)},
             'at': datetime.datetime.now().isoformat(timespec='seconds')}
+
+
+STREAM_PROMPT = """질문: %(q)s
+
+## 읽은 페이지 (번호 붙임)
+%(bodies)s
+%(raws)s
+
+위 내용만 근거로 답하라. **JSON이 아니라 일반 텍스트로 답한다.**
+
+- 인용은 반드시 번호로 한다 — 예: `...라고 서술한다[1].` 두 페이지를 함께
+  인용하면 `[1][2]`. **`[[페이지 이름]]` 형태의 위키링크는 쓰지 마라** —
+  번호만 쓴다. 주어진 번호(1~%(n)s) 밖의 번호를 지어내지 마라.
+- `status: draft` 인 페이지를 인용하면 **검증이 필요하다고 명시**한다.
+  `status: seed` 는 근거로 쓰지 마라.
+- 한 페이지에만 있는 서술이면 그렇다고 밝힌다. 단일 출처로 단정하지 마라.
+- 개념부터 설명하고 비교 가능한 예시를 든다. 결론만 던지지 마라.
+- 위 내용으로 답할 수 없는 부분은 **"위키에 없음"이라고 문장으로 명시**한다.
+  위키에 없는 것을 있는 것처럼 섞지 마라. 이 구분이 무너지면 위키 전체가 무너진다."""
+
+EXTRACT_PROMPT = """질문: %(q)s
+
+## 방금 작성한 답변
+%(answer)s
+
+## 답변이 인용에 쓴 페이지
+%(pages)s
+
+이 답변을 근거로 다음만 판단하라 (답변을 다시 쓰지 마라):
+- `in_wiki`: 질문에 위키 근거로 답했으면 true, "위키에 없음"이 핵심이면 false
+- `missing`: 답변이 다루지 못한 부분. 없으면 빈 문자열
+- `suggest_collect`: 보강하면 좋을 자료. 없으면 빈 문자열"""
+
+
+def run_stream(q, use_raw=False, max_pages=4, on_event=None, cancel=None):
+    """실시간 스트리밍 경로. 웹 UI 질문 탭이 쓴다.
+
+    `on_event(kind, data)`를 단계마다 부른다 — kind는
+    'stage'(진행 단계) / 'token'(답변 토큰 조각) / 'done'(최종 결과) /
+    'cancelled'(중단됨). CLI의 `run()`은 이 함수를 쓰지 않는다 — 인용 문법이
+    다르다(번호 `[n]` vs 위키링크 `[[이름]]`). 웹 UI만 번호 인용을 쓴다.
+    """
+    on_event = on_event or (lambda k, d: None)
+    cancel = cancel or (lambda: False)
+    system = build_system()
+    cat, meta = catalog()
+    idx = os.path.join(ROOT, 'wiki', 'index.md')
+
+    on_event('stage', {'stage': '질문 확인', 'step': 0, 'of': 3})
+    pick, u1 = llm.chat_json(system, PICK % {
+        'q': q, 'cat': cat, 'max': max_pages,
+        'index': rd(idx) if os.path.exists(idx) else ''},
+        max_tokens=8000, schema=PICK_SCHEMA)
+
+    on_event('stage', {'stage': '위키 후보 찾기', 'step': 1, 'of': 3, 'pick': pick})
+    names = [n for n in (pick.get('pages') or []) if n in meta][:max_pages]
+
+    bodies, used = [], []
+    for i, n in enumerate(names, 1):
+        t, _rel = page_text(n)
+        if t:
+            bodies.append('\n### [%d] %s  (status: %s)\n```\n%s\n```'
+                          % (i, n, meta[n]['status'], t))
+            used.append(n)
+    raws = ''
+    if use_raw or not used:
+        rh = raw_hits(q)
+        if rh:
+            raws = '\n## 원본 (최후 수단, 번호 없음 — 인용하지 마라)\n' + ''.join(
+                '\n### %s\n```\n%s\n```' % (p, t[:6000]) for _, p, t in rh)
+
+    if not used and not raws:
+        r = {'q': q, 'pick': pick, 'answer': None, 'in_wiki': False,
+             'missing': '이 볼트에 근거가 없다.', 'sources': [],
+             'suggest_collect': '이 주제의 기사나 논문을 raw/ 에 모아라.',
+             'usage': u1, 'read': [], 'ghost_citations': [],
+             'at': datetime.datetime.now().isoformat(timespec='seconds')}
+        on_event('done', r)
+        return r
+
+    # 답변이 나오기 전에 인용 번호가 무엇을 가리키는지 먼저 알려준다.
+    # 이게 없으면 클라이언트는 스트리밍 중 나오는 [n]을 어디로 연결할지 모른다
+    # — 인용이 "표시는 되는데 클릭이 안 되는" 상태가 된다.
+    # 스트리밍 시작 전에 순번표를 먼저 보낸다 — 그래야 클라이언트가 [1][2]를
+    # 스트리밍 도중에도 클릭 가능한 버튼으로 렌더링할 수 있다. 이벤트 이름과
+    # 필드는 tools/static/index.html 의 'candidates' 리스너와 반드시 맞아야 한다.
+    on_event('candidates', {'pages': [
+        {'ordinal': i, 'page': n} for i, n in enumerate(used, 1)]})
+
+    on_event('stage', {'stage': '답변 작성', 'step': 2, 'of': 3})
+    text, u2, cancelled = llm.chat_stream(
+        system, STREAM_PROMPT % {'q': q, 'bodies': ''.join(bodies) or '(없음)',
+                                 'raws': raws, 'n': len(used)},
+        max_tokens=16000,
+        on_delta=lambda d: on_event('token', {'delta': d}),
+        cancel=cancel)
+
+    if cancelled:
+        r = {'q': q, 'answer': text, 'cancelled': True,
+             'usage': {k: u1.get(k, 0) + u2.get(k, 0) for k in set(u1) | set(u2)},
+             'at': datetime.datetime.now().isoformat(timespec='seconds')}
+        on_event('cancelled', r)
+        return r
+
+    # 인용 번호를 우리가 만든 순번표와 대조한다 — 모델이 지어낼 수 없다
+    cited = sorted(set(int(m) for m in re.findall(r'\[(\d{1,2})\]', text)))
+    ghost = [n for n in cited if n < 1 or n > len(used)]
+    srcs = []
+    for n in cited:
+        if n < 1 or n > len(used):
+            continue
+        name = used[n - 1]
+        m = meta.get(name, {})
+        st = m.get('status', '?')
+        srcs.append({'ordinal': n, 'page': name, 'status': st,
+                     'strength': STRENGTH.get(st, ('알 수 없음', 'warn'))[0],
+                     'level': STRENGTH.get(st, ('', 'warn'))[1],
+                     'needs_source': m.get('needs_source', False),
+                     'derived': m.get('derived', False)})
+
+    pages_desc = ''.join('- [%d] %s (%s)\n' % (n, used[n - 1], meta[used[n - 1]]['status'])
+                         for n in range(1, len(used) + 1))
+    ext, u3 = llm.chat_json(system, EXTRACT_PROMPT % {
+        'q': q, 'answer': text, 'pages': pages_desc or '(없음)'},
+        max_tokens=2000, schema=EXTRACT_SCHEMA)
+
+    r = {'q': q, 'pick': pick, 'read': used, 'ghost_citations': ghost,
+         'answer': text, 'in_wiki': ext.get('in_wiki'),
+         'missing': ext.get('missing'), 'sources': srcs,
+         'suggest_collect': ext.get('suggest_collect'),
+         'usage': {k: u1.get(k, 0) + u2.get(k, 0) + u3.get(k, 0)
+                  for k in set(u1) | set(u2) | set(u3)},
+         'at': datetime.datetime.now().isoformat(timespec='seconds')}
+    on_event('done', r)
+    return r
 
 
 def save(result, name=None):

@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LLM Wiki</title>
+<script>try{var _t=localStorage.getItem("llmwiki_theme");if(_t)document.documentElement.dataset.theme=_t;}catch(e){}</script>
+<script src="/static/restricted-markdown.js" defer></script>
 <style>
   :root{
     --bg:#f7f7f5; --card:#fff; --line:#e3e3df; --ink:#1f1f1d; --dim:#6b6b66;
@@ -12,6 +14,8 @@
   @media (prefers-color-scheme:dark){
     :root{--bg:#1a1a18;--card:#232320;--line:#38382f;--ink:#eceae4;--dim:#9a978e;}
   }
+  :root[data-theme="dark"]{--bg:#1a1a18;--card:#232320;--line:#38382f;--ink:#eceae4;--dim:#9a978e;}
+  :root[data-theme="light"]{--bg:#f7f7f5;--card:#fff;--line:#e3e3df;--ink:#1f1f1d;--dim:#6b6b66;}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
        font:14px/1.6 -apple-system,"Segoe UI","Malgun Gothic",sans-serif}
@@ -27,6 +31,7 @@
              padding:6px 13px;border-radius:7px;cursor:pointer;font-size:13px;font-family:inherit}
   nav button.on{background:var(--bg);color:var(--ink);border-color:var(--line);font-weight:600}
   main{max-width:1000px;margin:0 auto;padding:22px}
+  main.wide{max-width:min(1500px,calc(100% - 48px))}
   section{display:none} section.on{display:block}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:10px}
   .stat{background:var(--card);border:1px solid var(--line);border-radius:11px;
@@ -77,6 +82,12 @@
   .doc{line-height:1.75}
   .doc h1{font-size:21px;margin:20px 0 10px} .doc h2{font-size:16px;margin:22px 0 9px}
   .doc h3{font-size:14px;margin:18px 0 7px;color:var(--dim)}
+  .doc h4{font-size:13px;margin:14px 0 6px;color:var(--dim)}
+  .doc .ai-markdown-table-wrap{overflow-x:auto}
+  .doc button.ai-citation-ref{display:inline;border:1px solid var(--acc);color:var(--acc);
+    background:var(--card);border-radius:8px;font:inherit;font-size:10.5px;padding:0 5px;
+    margin:0 1px;cursor:pointer;line-height:1.5;vertical-align:2px}
+  .doc button.ai-citation-ref:hover,.doc button.ai-citation-ref.hl{background:var(--acc);color:#fff}
   .doc table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13px;display:block;
              overflow-x:auto}
   .doc th,.doc td{border:1px solid var(--line);padding:6px 10px;text-align:left}
@@ -117,6 +128,41 @@
     border-bottom:1px solid var(--line);font-size:12px}
   .src:last-child{border-bottom:0}
   .src a{cursor:pointer;color:var(--acc);text-decoration:none}
+
+  /* 질문 탭 — 뷰포트에 맞춰 높이를 고정하고, 대화만 내부 스크롤한다.
+     구성은 [예시 칩](고정) → [대화 스크롤 영역](늘어남) → [입력창](고정),
+     Sec_AI의 3행 그리드(auto / 1fr / auto) 방식을 그대로 따른다. */
+  .qshell{display:grid;grid-template-columns:200px 1fr;gap:16px;
+    height:clamp(460px,calc(100vh - 150px),900px)}
+  @media(max-width:820px){.qshell{grid-template-columns:1fr;height:auto}}
+  .qhist{background:var(--card);border:1px solid var(--line);border-radius:11px;
+    padding:14px;height:100%;overflow-y:auto}
+  .qhist h2{font-size:12px;margin:0 0 10px;color:var(--dim);font-weight:600;
+    text-transform:uppercase;letter-spacing:.05em}
+  .qhist-row{padding:7px 9px;border-radius:7px;font-size:12.5px;color:var(--dim);
+    background:var(--bg);margin-top:7px;opacity:.65;cursor:not-allowed;position:relative}
+  .qhist-row .badge{position:absolute;right:8px;top:7px;font-size:9px;
+    border:1px solid var(--line);border-radius:8px;padding:0 5px;color:var(--dim)}
+  .qmain{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100%;
+    background:var(--card);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+  @media(max-width:820px){.qmain{height:auto;grid-template-rows:auto auto auto}}
+  .qexamples{padding:13px 15px 0}
+  #qout{min-height:0;overflow-y:auto;padding:13px 15px;display:flex;flex-direction:column}
+  @media(max-width:820px){#qout{max-height:60vh}}
+  .qcomposer{padding:12px 15px 14px;border-top:1px solid var(--line);
+    background:var(--bg)}
+  .qcomposer textarea{min-height:52px}
+  .qcomposer-row{display:flex;align-items:center;gap:10px;margin-top:9px}
+  .qcomposer-row select{width:auto}
+  .qsteps-wrap{margin-bottom:2px;flex:none}
+  .msg-user{align-self:flex-end;max-width:80%;background:var(--acc);color:#fff;
+    border-radius:14px 14px 3px 14px;padding:9px 14px;margin-bottom:12px;
+    font-size:13.5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+  .ans{background:var(--card);border:1px solid var(--line);border-radius:11px;
+    padding:15px 17px;margin-bottom:14px;line-height:1.75;flex:none}
+  .ans p{margin:8px 0}
+  #qout>.box{flex:none}
+  .src.hl{background:color-mix(in srgb,var(--acc) 12%,transparent);border-radius:6px}
 </style>
 </head>
 <body>
@@ -124,12 +170,13 @@
   <h1>LLM Wiki</h1>
   <a id="obs" class="pill" href="#" title="Obsidian을 연다. 그래프는 좌측 사이드바의 그래프 아이콘">
     Obsidian 열기</a>
+  <button class="act" id="themeToggle" title="다크모드 전환" style="margin-left:4px">🌓</button>
   <nav>
     <button class="on" data-t="s">상태판</button>
     <button data-t="add">자료 넣기</button>
     <button data-t="wiki">위키</button>
     <button data-t="ing">인제스트</button>
-    <button data-t="q">질문</button>
+    <button data-t="query">질문</button>
     <button data-t="lint">점검</button>
   </nav>
 </header>
@@ -239,19 +286,40 @@
   </section>
 
   <!-- 질문 -->
-  <section id="q">
-    <div class="box">
-      <input id="qq" placeholder="위키에게 물어본다 — 예: 프롬프트 인젝션을 어떻게 막나?">
-      <div style="display:flex;align-items:center;gap:10px;margin-top:9px">
-        <label class="muted" style="font-size:12px">
-          <input type="checkbox" id="qraw"> 원본(raw)까지 뒤진다</label>
-        <span class="grow"></span>
-        <button class="act pri" id="qgo">묻기</button>
+  <section id="query">
+    <div class="qshell">
+      <aside class="qhist">
+        <h2>내 대화</h2>
+        <button class="act" id="qnew" style="width:100%">+ 새 질문</button>
+        <div class="muted" style="font-size:11px;margin-top:9px">
+          대화 기록 저장은 아직 지원하지 않는다. 아래는 준비 중인 모습이다.</div>
+        <div class="qhist-row" aria-disabled="true">프롬프트 인젝션 방어<span class="badge">준비중</span></div>
+        <div class="qhist-row" aria-disabled="true">Sysmon 온톨로지<span class="badge">준비중</span></div>
+      </aside>
+
+      <div class="qmain">
+        <div class="chips qexamples" id="qexamples"></div>
+
+        <div id="qout"></div>
+
+        <form class="qcomposer" id="qform">
+          <textarea id="qq" rows="2"
+            placeholder="위키에게 물어본다 — 예: 프롬프트 인젝션을 어떻게 막나? (Shift+Enter로 줄바꿈)"></textarea>
+          <div class="qcomposer-row">
+            <select id="qprofile" title="답변 방식">
+              <option value="fast">빠른 답변 (2쪽)</option>
+              <option value="precise" selected>자세한 답변 (4쪽 + 원본)</option>
+            </select>
+            <span class="grow"></span>
+            <button type="button" class="act" id="qstop" hidden>■ 중단</button>
+            <button type="submit" class="act pri" id="qgo">묻기</button>
+          </div>
+        </form>
       </div>
-      <div class="note"><code>index</code>로 후보를 좁히고 <b>고른 페이지만</b> 읽는다.
-        위키 전체를 넣지 않으므로 싸고 근거가 명확하다.</div>
     </div>
-    <div id="qout"></div>
+    <div class="note"><code>index</code>로 후보를 좁히고 <b>고른 페이지만</b> 읽는다 —
+      위키 전체를 넣지 않으므로 싸고 근거가 명확하다. 인용은 번호로 한다 —
+      문장의 <code>[1]</code>을 누르면 아래 근거로 이동한다.</div>
   </section>
 
   <!-- 점검 -->
@@ -274,9 +342,23 @@ const get = p => fetch('/api' + p).then(r => r.json());
 const post = (p, d) => fetch('/api' + p, { method: 'POST',
   body: new URLSearchParams(d || {}) }).then(r => r.json());
 
+// 다크모드 — OS 설정을 기본으로 따르되, 눌러서 명시적으로 바꿀 수 있다
+(() => {
+  const btn = $('#themeToggle');
+  const apply = t => { document.documentElement.dataset.theme = t;
+    try { localStorage.setItem('llmwiki_theme', t); } catch (_) {} };
+  btn.onclick = () => {
+    const cur = document.documentElement.dataset.theme ||
+      (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+    apply(cur === 'dark' ? 'light' : 'dark');
+  };
+})();
+
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === b.dataset.t));
+  // 질문 탭은 3열 대화형 레이아웃이라 다른 탭보다 넓게 쓴다
+  document.querySelector('main').classList.toggle('wide', b.dataset.t === 'query');
   // 화면을 열 때마다 다시 읽는다 — .env 를 고치면 새로고침 없이 반영되도록
   if (b.dataset.t === 'ing') drawIngest();
   if (b.dataset.t === 's') loadStatus();
@@ -518,120 +600,243 @@ loadStatus(); loadStubs(); loadLint(); loadTags(); loadZotero(); loadWiki();
 drawIngest();
 /* ===== 질문 ===== */
 const STLABEL = { ok: '자유롭게 인용', warn: '검증 필요', err: '인용 금지' };
+const QEXAMPLES = [
+  '프롬프트 인젝션을 어떻게 막나?',
+  '보상 해킹이 뭐야?',
+  'Sysmon 로그의 온톨로지 구성 요소는?',
+];
+let qES = null, qJID = null, qLastQ = '', qCiteMap = {}, qAllowedIds = [];
 
-async function ask() {
-  const v = $('#qq').value.trim();
-  if (!v) return;
-  $('#qgo').disabled = true; $('#qgo').textContent = '생각 중…';
-  $('#qout').innerHTML = '<div class="box muted">index로 후보를 좁히는 중… ' +
-    '(보통 2~4분 걸린다)</div>';
-  let r;
-  try {
-    r = await post('/query', { q: v, use_raw: $('#qraw').checked ? 'true' : 'false' });
-  } catch (e) { r = { error: String(e) }; }
-  $('#qgo').disabled = false; $('#qgo').textContent = '묻기';
-  drawAnswer(r);
+function qCandidateBox() {
+  let box = document.getElementById('qcandidates');
+  if (!box) {
+    box = el('div', 'box'); box.id = 'qcandidates';
+    $('#qout').appendChild(box);
+  }
+  return box;
 }
 
-function drawAnswer(r) {
-  const o = $('#qout'); o.innerHTML = '';
-  if (r.error) {
-    const x = el('div', 'warnbox'); x.textContent = r.error; o.appendChild(x); return;
+function drawExamples() {
+  const box = $('#qexamples'); box.innerHTML = '';
+  QEXAMPLES.forEach(ex => {
+    const c = el('span', 'chip', ex);
+    c.onclick = () => { $('#qq').value = ex; startQuery(); };
+    box.appendChild(c);
+  });
+}
+
+function qSteps(stepIdx) {
+  const STEPS = ['질문 확인', '위키 후보 찾기', '답변 작성'];
+  let wrap = document.getElementById('qsteps');
+  if (!wrap) {
+    wrap = el('div', 'box qsteps-wrap'); wrap.id = 'qsteps';
+    wrap.appendChild(el('div', 'steps'));
+    $('#qout').appendChild(wrap);
   }
-  // 위키에 없는 것을 있는 것처럼 섞지 않는다 — 먼저, 크게 보여준다
+  const sv = wrap.querySelector('.steps'); sv.innerHTML = '';
+  STEPS.forEach((n, i) => {
+    const e = el('div', '', (i + 1) + '. ' + n);
+    if (i < stepIdx) e.className = 'ok';
+    else if (i === stepIdx) e.className = 'on';
+    sv.appendChild(e);
+  });
+}
+
+function qAnswerBox() {
+  let box = document.getElementById('qanswer');
+  if (!box) {
+    box = el('div', 'ans'); box.id = 'qanswer';
+    box.appendChild(el('div', '', ''));
+    $('#qout').appendChild(box);
+  }
+  return box.firstChild;
+}
+
+let qRenderer = null;
+
+async function startQuery() {
+  const v = $('#qq').value.trim();
+  if (!v || qES) return;
+  qLastQ = v;
+  $('#qout').innerHTML = '';
+  $('#qout').appendChild(el('div', 'msg-user', v));
+  $('#qgo').disabled = true; $('#qstop').hidden = false;
+  qSteps(0);
+  const profile = $('#qprofile').value;
+  const maxPages = profile === 'fast' ? 2 : 4;
+  const useRaw = profile === 'precise';
+  let r;
+  try {
+    r = await post('/query/start', { q: v, use_raw: useRaw ? 'true' : 'false',
+      max_pages: maxPages });
+  } catch (e) { r = { error: String(e) }; }
+  if (r.error) { qDone(); showQError(r.error); return; }
+  qJID = r.jid;
+  qRenderer = null; qCiteMap = {}; qAllowedIds = [];
+  qES = new EventSource('/api/query/events?jid=' + encodeURIComponent(qJID));
+  qES.addEventListener('stage', e => {
+    const d = JSON.parse(e.data);
+    qSteps(d.step);
+  });
+  qES.addEventListener('candidates', e => {
+    // 스트리밍이 시작되기 전에 순번표를 미리 받는다 — 그래야 [1][2]가
+    // 타이핑되는 동안에도 클릭 가능한 버튼으로 보인다 (텍스트로만 남지 않는다).
+    const pages = JSON.parse(e.data).pages || [];
+    qAllowedIds = pages.map(p => '[' + p.ordinal + ']');
+    if (!pages.length) return;
+    const b = qCandidateBox();
+    b.innerHTML = '<h2>읽는 중 ' + pages.length + '쪽</h2>';
+    pages.forEach(p => {
+      const row = el('div', 'src'); row.dataset.n = p.ordinal;
+      row.innerHTML = '<span class="pill">[' + p.ordinal + ']</span>' +
+        '<span class="grow muted">' + p.page + '</span>';
+      qCiteMap[p.ordinal] = row;
+      b.appendChild(row);
+    });
+  });
+  qES.addEventListener('token', e => {
+    const d = JSON.parse(e.data);
+    const target = qAnswerBox();
+    if (!qRenderer) {
+      qRenderer = window.SecAIRestrictedMarkdown
+        ? window.SecAIRestrictedMarkdown.createStreamingRenderer(target,
+            { allowedOrigins: [location.origin], allowedCitationIds: qAllowedIds,
+              onCitationActivate: onCite })
+        : null;
+      if (!qRenderer) target.classList.add('doc');
+    }
+    if (qRenderer) qRenderer.append(d.delta);
+    else target.textContent = (target.textContent || '') + d.delta;
+  });
+  qES.addEventListener('done', e => { qDone(); finishAnswer(JSON.parse(e.data)); });
+  qES.addEventListener('cancelled', e => { qDone(); cancelledAnswer(JSON.parse(e.data)); });
+  qES.addEventListener('error', e => {
+    qDone();
+    let msg = '연결이 끊겼다';
+    try { msg = JSON.parse(e.data).error || msg; } catch (_) {}
+    showQError(msg);
+  });
+}
+
+function qDone() {
+  if (qES) { qES.close(); qES = null; }
+  $('#qgo').disabled = false; $('#qstop').hidden = true;
+  qJID = null;
+}
+
+async function stopQuery() {
+  if (!qJID) return;
+  $('#qstop').disabled = true; $('#qstop').textContent = '중단 중…';
+  await post('/query/stop', { jid: qJID });
+}
+
+function showQError(msg) {
+  const x = el('div', 'warnbox'); x.textContent = msg; $('#qout').appendChild(x);
+}
+
+function cancelledAnswer(r) {
+  if (qRenderer) qRenderer.complete();
+  const note = el('div', 'note', '중단됨 — 여기까지만 생성했다. 저장·근거 확인은 되지 않는다.');
+  $('#qout').appendChild(note);
+  $('#qstop').disabled = false; $('#qstop').textContent = '■ 중단';
+}
+
+function onCite(citationId) {
+  const n = (citationId.match(/\d+/) || [])[0];
+  const row = qCiteMap[n];
+  if (!row) return;
+  document.querySelectorAll('.src.hl').forEach(x => x.classList.remove('hl'));
+  row.classList.add('hl');
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => row.classList.remove('hl'), 1800);
+}
+
+function finishAnswer(r) {
+  // 스트리밍 중에는 그때까지 알던 순번(qAllowedIds)으로만 인용을 인식했다.
+  // 다 끝났으니 실제로 인용된 번호(r.sources)로 최종 렌더를 한 번 더 해서
+  // 확정한다 — 스트리밍 도중 놓친 경계 케이스가 있어도 여기서 바로잡힌다.
+  const finalIds = (r.sources || []).map(s => '[' + s.ordinal + ']');
+  const target = qAnswerBox();
+  if (window.SecAIRestrictedMarkdown) {
+    qRenderer && qRenderer.destroy();
+    window.SecAIRestrictedMarkdown.render(target, r.answer || '', {
+      allowedOrigins: [location.origin], allowedCitationIds: finalIds,
+      onCitationActivate: onCite });
+  } else if (qRenderer) {
+    qRenderer.complete();
+  }
+  document.getElementById('qcandidates')?.remove();
+  qCiteMap = {};
+  qLastResult = r;
   if (r.in_wiki === false) {
     const w = el('div', 'warnbox');
     w.innerHTML = '<b>위키에 없음</b><br>' + (r.missing || '이 볼트에 근거가 없다.');
-    o.appendChild(w);
-  }
-  if (r.answer) {
-    const a = el('div', 'box');
-    const d = el('div', 'doc'); d.innerHTML = mdLite(r.answer);
-    a.appendChild(d); o.appendChild(a);
-    d.querySelectorAll('a.wl').forEach(x => x.onclick = () => {
-      document.querySelector('[data-t=wiki]').click(); openPage(x.dataset.p); });
+    $('#qout').insertBefore(w, $('#qout').firstChild.nextSibling || null);
   }
   if ((r.sources || []).length) {
     const b = el('div', 'box');
     b.innerHTML = '<h2>근거 ' + r.sources.length + '개</h2>';
     r.sources.forEach(s => {
-      const e = el('div', 'src');
-      e.innerHTML = '<span class="st st-' + s.level + '">' + s.status + '</span>' +
+      const e = el('div', 'src'); e.dataset.n = s.ordinal;
+      e.innerHTML = '<span class="pill">[' + s.ordinal + ']</span>' +
+        '<span class="st st-' + s.level + '">' + s.status + '</span>' +
         '<a class="grow" data-p="' + s.page + '">' + s.page + '</a>' +
         '<span class="muted">' + (STLABEL[s.level] || '') +
-        (s.needs_source ? ' · 보강필요' : '') + (s.read ? '' : ' · 읽지 않음') + '</span>';
+        (s.needs_source ? ' · 보강필요' : '') + '</span>';
       e.querySelector('a').onclick = () => {
         document.querySelector('[data-t=wiki]').click(); openPage(s.page); };
+      qCiteMap[s.ordinal] = e;
       b.appendChild(e);
     });
-    if ((r.ghost_links || []).length)
+    if ((r.ghost_citations || []).length)
       b.innerHTML += '<div class="warnbox" style="margin-top:9px">' +
-        '<b>읽지 않은 페이지를 링크했다</b><br>' + r.ghost_links.join(', ') + '</div>';
-    o.appendChild(b);
+        '<b>범위 밖 인용 번호를 썼다</b> — [' + r.ghost_citations.join('], [') + ']</div>';
+    $('#qout').appendChild(b);
   }
   if (r.suggest_collect) {
     const c = el('div', 'box');
-    c.innerHTML = '<h2>모으면 좋을 자료</h2><div class="muted">' +
-      r.suggest_collect + '</div>';
-    o.appendChild(c);
+    c.innerHTML = '<h2>모으면 좋을 자료</h2><div class="muted">' + r.suggest_collect + '</div>';
+    $('#qout').appendChild(c);
   }
   if (r.answer) {
     const f = el('div', 'box');
-    f.innerHTML = '<h2>위키에 되먹이기</h2>' +
-      '<div class="muted">여러 페이지를 종합해 <b>새로운 연결</b>을 만들었을 때만 저장한다. ' +
-      '한 페이지 내용을 옮긴 것이면 저장하지 않는다.</div>' +
-      '<button class="act" id="qsave" style="margin-top:9px">Output/ 에 저장</button>' +
+    f.innerHTML = '<h2>답변 다루기</h2>' +
+      '<div class="muted">여러 페이지를 종합해 <b>새로운 연결</b>을 만들었을 때만 저장한다.</div>' +
+      '<div style="display:flex;gap:8px;margin-top:9px">' +
+      '<button class="act" id="qsave">Output/ 에 저장</button>' +
+      '<button class="act" id="qcopy">복사</button>' +
+      '<button class="act" id="qretry">다시 질문</button></div>' +
       '<span id="qsaved" class="muted" style="margin-left:9px"></span>';
-    o.appendChild(f);
+    $('#qout').appendChild(f);
     $('#qsave').onclick = async () => {
       $('#qsave').disabled = true;
       const x = await post('/query/save');
       $('#qsaved').textContent = x.ok ? ('저장됨 · ' + x.path) : x.error;
       if (!x.ok) $('#qsave').disabled = false;
     };
+    $('#qcopy').onclick = async () => {
+      try { await navigator.clipboard.writeText(qAnswerBox().innerText);
+        $('#qcopy').textContent = '복사됨'; setTimeout(() => $('#qcopy').textContent = '복사', 1500);
+      } catch (_) { $('#qsaved').textContent = '복사 실패 — 직접 드래그해서 복사하라'; }
+    };
+    $('#qretry').onclick = () => { $('#qq').value = qLastQ; startQuery(); };
   }
   if (r.usage) {
     const u = el('div', 'note');
     u.textContent = '입력 ' + r.usage.in + ' · 출력 ' + r.usage.out + ' 토큰';
-    o.appendChild(u);
+    $('#qout').appendChild(u);
   }
 }
+let qLastResult = null;
 
-// 답변은 서버를 거치지 않으므로 최소한만 마크다운으로 만든다
-function mdLite(t) {
-  const esc = x => x.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const out = [];
-  let tbl = [];
-  const flush = () => {
-    if (!tbl.length) return;
-    const rows = tbl.filter(r => !/^\s*\|[\s|:-]+\|\s*$/.test(r));
-    out.push('<table>' + rows.map((r, i) => '<tr>' + r.replace(/^\||\|$/g, '')
-      .split('|').map(c => '<' + (i ? 'td' : 'th') + '>' + inl(esc(c.trim())) +
-      '</' + (i ? 'td' : 'th') + '>').join('') + '</tr>').join('') + '</table>');
-    tbl = [];
-  };
-  const inl = x => x
-    .replace(/\[\[([^\]|#]+?)\]\]/g, (m, p) => '<a class="wl" data-p="' + p + '">' + p + '</a>')
-    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>');
-  t.split('\n').forEach(ln => {
-    if (/^\s*\|/.test(ln)) { tbl.push(ln.trim()); return; }
-    flush();
-    const h = ln.match(/^(#{1,4})\s+(.*)$/);
-    if (h) { out.push('<h' + (h[1].length + 1) + '>' + inl(esc(h[2])) +
-      '</h' + (h[1].length + 1) + '>'); return; }
-    if (/^\s*[-*]\s+/.test(ln)) { out.push('<li>' + inl(esc(ln.replace(/^\s*[-*]\s+/, ''))) + '</li>'); return; }
-    if (/^>\s?/.test(ln)) { out.push('<blockquote>' + inl(esc(ln.replace(/^>\s?/, ''))) + '</blockquote>'); return; }
-    if (/^---+$/.test(ln.trim())) { out.push('<hr>'); return; }
-    if (!ln.trim()) { out.push(''); return; }
-    out.push('<p>' + inl(esc(ln)) + '</p>');
-  });
-  flush();
-  return out.join('\n');
-}
-
-$('#qgo').onclick = ask;
-$('#qq').onkeydown = e => { if (e.key === 'Enter') ask(); };
+$('#qform').onsubmit = e => { e.preventDefault(); startQuery(); };
+$('#qq').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startQuery(); } };
+$('#qstop').onclick = stopQuery;
+$('#qnew').onclick = () => {
+  if (qES) stopQuery();
+  $('#qq').value = ''; $('#qout').innerHTML = ''; $('#qq').focus();
+};
+drawExamples();
 
 /* ===== 인제스트 ===== */
 const STEPS = ['읽기', '분석', '작성', '마무리'];
