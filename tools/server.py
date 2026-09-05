@@ -260,6 +260,97 @@ def api_queue():
     return {'items': queue_items()}
 
 
+# ── 마크다운 렌더링 ───────────────────────────────────────────
+# 표준 마크다운으로 처리되지 않는 우리 문법 셋을 먼저 변환한다.
+#   [[위키링크]]  ^[출처 마커]  > [!콜아웃]
+
+def _callouts(text):
+    """> [!inference] 블록을 div로 바꾼다."""
+    out, i, lines = [], 0, text.split(NL)
+    while i < len(lines):
+        m = re.match(r'^>\s*\[!(\w+)\]\s*(.*)$', lines[i])
+        if not m:
+            out.append(lines[i]); i += 1; continue
+        kind, title = m.group(1).lower(), m.group(2).strip()
+        body, i = [], i + 1
+        while i < len(lines) and lines[i].startswith('>'):
+            body.append(re.sub(r'^>\s?', '', lines[i])); i += 1
+        out.append('<div class="co co-' + kind + '">')
+        out.append('<b>' + (title or kind) + '</b>' + NL)
+        out.append(NL.join(body))
+        out.append('</div>')
+    return NL.join(out)
+
+
+def _inline(html):
+    html = re.sub(r'\^\[([^\]]+)\]',
+                  lambda m: '<sup class="mk" title="' + m.group(1) + '">출처</sup>', html)
+    html = re.sub(r'\[\[([^\]|#]+?)(?:\|([^\]]+))?\]\]',
+                  lambda m: '<a class="wl" data-p="' + m.group(1).strip() + '">'
+                            + (m.group(2) or m.group(1)).strip() + '</a>', html)
+    return html
+
+
+def render_md(body):
+    import markdown as _md
+    h = _md.markdown(_callouts(body),
+                     extensions=['tables', 'fenced_code', 'sane_lists'])
+    return _inline(h)
+
+
+def find_page(name):
+    for d in ('wiki', 'context', 'docs', 'wiki/_archive', ''):
+        p = os.path.join(ROOT, d, name + '.md')
+        if os.path.exists(p):
+            return p
+    return None
+
+
+@app.get('/api/page')
+def api_page(name: str):
+    p = find_page(name)
+    if not p:
+        return JSONResponse({'ok': False, 'error': '없는 페이지: ' + name}, 404)
+    text = rd(p)
+    fm, body = fm_of(text), text[len(fm_of(text)):]
+    meta = dict(re.findall(r'^([a-z_]+):\s*(.*)$', fm, re.M))
+    out = sorted(set(re.findall(r'\[\[([^\]|#]+)', re.sub(r'`[^`]*`', '', body))))
+    back = []
+    for q in glob.glob(os.path.join(ROOT, 'wiki', '*.md')) +             glob.glob(os.path.join(ROOT, 'context', '*.md')) +             glob.glob(os.path.join(ROOT, 'docs', '*.md')):
+        b = os.path.basename(q)[:-3]
+        if b == name:
+            continue
+        if re.search(r'\[\[' + re.escape(name) + r'[\]|#]', rd(q)):
+            back.append(b)
+    return {'ok': True, 'name': name,
+            'path': os.path.relpath(p, ROOT).replace(chr(92), '/'),
+            'meta': meta, 'html': render_md(body),
+            'outlinks': [x.strip() for x in out], 'backlinks': sorted(back),
+            'vault': os.path.basename(ROOT)}
+
+
+@app.get('/api/search')
+def api_search(q: str):
+    """제목·별칭·본문 전체 검색. Obsidian의 Ctrl+Shift+F 대응."""
+    ql, hits = q.lower(), []
+    for folder in ('wiki', 'raw', 'context', 'docs'):
+        for p2 in glob.glob(os.path.join(ROOT, folder, '**', '*.md'), recursive=True):
+            b = os.path.basename(p2)[:-3]
+            if b == 'CLAUDE':
+                continue
+            s2 = rd(p2)
+            n = s2.lower().count(ql)
+            if not n and ql not in b.lower():
+                continue
+            idx = s2.lower().find(ql)
+            snip = ''
+            if idx >= 0:
+                snip = ' '.join(s2[max(0, idx - 60):idx + 90].split())
+            hits.append({'name': b, 'folder': folder, 'hits': n, 'snippet': snip,
+                         'openable': folder in ('wiki', 'context', 'docs')})
+    return sorted(hits, key=lambda x: -x['hits'])[:40]
+
+
 @app.get('/', response_class=HTMLResponse)
 def index():
     return rd(os.path.join(ROOT, 'tools', 'static', 'index.html'))

@@ -245,6 +245,19 @@ payload = {
 io.open('reports/lint-' + str(TODAY) + '.json', 'w', encoding='utf-8').write(
     json.dumps(payload, ensure_ascii=False, indent=2))
 
+# 웹 UI 등 다른 도구가 읽을 수 있게 JSON도 남긴다 (같은 검사 결과, 다른 형식)
+payload = {
+    'date': str(TODAY),
+    'counts': dict((s, len([r for r in res if r[0] == s])) for s in 'EWI'),
+    'findings': [{'severity': s, 'check': n, 'what': w,
+                  'where': p2.replace(chr(92), '/'), 'how': h}
+                 for s, n, w, p2, h in res],
+    'stubs': [{'name': t, 'refs': len(v), 'from': sorted(v)}
+              for t, v in sorted(todo_ref.items(), key=lambda x: (-len(x[1]), x[0]))],
+}
+io.open('reports/lint-' + str(TODAY) + '.json', 'w', encoding='utf-8').write(
+    json.dumps(payload, ensure_ascii=False, indent=2))
+
 summary = 'E=%d W=%d I=%d  ->  %s' % (
     len([r for r in res if r[0] == 'E']),
     len([r for r in res if r[0] == 'W']),

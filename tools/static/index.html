@@ -64,6 +64,32 @@
   code{background:var(--bg);padding:1px 5px;border-radius:4px;font-size:12px}
   .note{font-size:12.5px;color:var(--dim);border-left:2px solid var(--line);
         padding-left:11px;margin:10px 0}
+  .split{display:grid;grid-template-columns:270px 1fr;gap:16px;align-items:start}
+  @media(max-width:820px){.split{grid-template-columns:1fr}}
+  .list{max-height:70vh;overflow:auto}
+  .item{padding:7px 9px;border-radius:7px;cursor:pointer;border:1px solid transparent}
+  .item:hover{background:var(--bg)} .item.on{background:var(--bg);border-color:var(--acc)}
+  .item small{display:block;color:var(--dim);font-size:11.5px;
+              overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .doc{line-height:1.75}
+  .doc h1{font-size:21px;margin:20px 0 10px} .doc h2{font-size:16px;margin:22px 0 9px}
+  .doc h3{font-size:14px;margin:18px 0 7px;color:var(--dim)}
+  .doc table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13px;display:block;
+             overflow-x:auto}
+  .doc th,.doc td{border:1px solid var(--line);padding:6px 10px;text-align:left}
+  .doc th{background:var(--bg)}
+  .doc pre{background:var(--bg);padding:11px 13px;border-radius:8px;overflow-x:auto;font-size:12.5px}
+  .doc blockquote{border-left:3px solid var(--line);margin:12px 0;padding:2px 14px;color:var(--dim)}
+  .doc a.wl{color:var(--acc);cursor:pointer;text-decoration:none;
+            border-bottom:1px solid color-mix(in srgb,var(--acc) 35%,transparent)}
+  .doc sup.mk{color:var(--dim);font-size:10px;border:1px solid var(--line);
+              border-radius:4px;padding:0 4px;margin-left:2px;cursor:help}
+  .co{border:1px solid var(--line);border-left:3px solid var(--dim);border-radius:8px;
+      padding:11px 14px;margin:13px 0;background:var(--bg);font-size:13.5px}
+  .co b{display:block;margin-bottom:5px;text-transform:capitalize}
+  .co-inference{border-left-color:var(--b)} .co-warning,.co-conflict{border-left-color:var(--warn)}
+  .co-unverified{border-left-color:var(--err)} .co-note,.co-tip{border-left-color:var(--acc)}
+  .co-important{border-left-color:var(--a)}
 </style>
 </head>
 <body>
@@ -72,6 +98,7 @@
   <nav>
     <button class="on" data-t="s">상태판</button>
     <button data-t="add">자료 넣기</button>
+    <button data-t="wiki">위키</button>
     <button data-t="lint">점검</button>
   </nav>
 </header>
@@ -134,6 +161,25 @@
         <button class="act" onclick="save(0)">raw/ 에 저장</button>
         <button class="act pri" onclick="save(1)">저장 + 인제스트 대기열</button>
         <span id="saveMsg" class="muted" style="align-self:center"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 위키 -->
+  <section id="wiki">
+    <div class="split">
+      <div class="box" style="margin-top:0">
+        <input id="q" placeholder="검색 (본문까지)" style="margin-bottom:10px">
+        <div class="chips" style="margin-bottom:9px">
+          <span class="chip on" data-f="">전체</span>
+          <span class="chip" data-f="(AI활용)">AI활용</span>
+          <span class="chip" data-f="(AI보호)">AI보호</span>
+        </div>
+        <div class="list" id="plist"></div>
+      </div>
+      <div class="box" style="margin-top:0">
+        <div id="phead"></div>
+        <div class="doc" id="pbody"><span class="muted">왼쪽에서 페이지를 고르세요</span></div>
       </div>
     </div>
   </section>
@@ -294,7 +340,69 @@ async function save(q) {
     loadStatus(); loadTags(); loadZotero(); }
 }
 
-loadStatus(); loadStubs(); loadLint(); loadTags(); loadZotero();
+let PAGES = [], FILT = '';
+
+async function loadWiki() {
+  PAGES = await get('/pages'); drawList();
+}
+
+function drawList(hits) {
+  const box = $('#plist'); box.innerHTML = '';
+  if (hits) {
+    hits.forEach(h => { const d = el('div', 'item');
+      d.appendChild(el('div', '', h.name));
+      d.appendChild(el('small', '', h.folder + (h.hits ? ' · ' + h.hits + '회' : '') +
+        (h.snippet ? ' · ' + h.snippet : '')));
+      if (h.openable) d.onclick = () => openPage(h.name);
+      box.appendChild(d); });
+    if (!hits.length) box.innerHTML = '<div class="muted">결과 없음</div>';
+    return;
+  }
+  PAGES.filter(p => !FILT || p.name.startsWith(FILT)).forEach(p => {
+    const d = el('div', 'item'); d.dataset.n = p.name;
+    d.appendChild(el('div', '', p.name));
+    d.appendChild(el('small', '', p.description || p.status));
+    d.onclick = () => openPage(p.name); box.appendChild(d);
+  });
+}
+
+async function openPage(name) {
+  document.querySelectorAll('#plist .item').forEach(i =>
+    i.classList.toggle('on', i.dataset.n === name));
+  const d = await get('/page?name=' + encodeURIComponent(name));
+  if (!d.ok) { $('#pbody').textContent = d.error; return; }
+  const h = $('#phead'); h.innerHTML = '';
+  const t = el('div'); t.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+  t.appendChild(el('b', '', d.name));
+  if (d.meta.status) t.appendChild(el('span', 'pill', d.meta.status));
+  if (d.meta.needs_source === 'true') t.appendChild(el('span', 'pill', '보강필요'));
+  const ob = el('a', 'pill'); ob.textContent = 'Obsidian에서 열기'; ob.style.cursor = 'pointer';
+  ob.href = 'obsidian://open?vault=' + encodeURIComponent(d.vault) +
+            '&file=' + encodeURIComponent(d.path.replace(/\.md$/, ''));
+  t.appendChild(ob); h.appendChild(t);
+  if (d.meta.source) h.appendChild(el('small', 'muted', '출처 ' + d.meta.source));
+  $('#pbody').innerHTML = d.html;
+  const bl = el('div', 'box'); bl.style.marginTop = '18px';
+  bl.appendChild(el('h2', '', '이 페이지를 참조하는 곳 (' + d.backlinks.length + ')'));
+  d.backlinks.forEach(b => { const a = el('a', 'chip', b);
+    a.style.cursor = 'pointer'; a.onclick = () => openPage(b); bl.appendChild(a); });
+  if (!d.backlinks.length) bl.appendChild(el('span', 'muted', '없음'));
+  $('#pbody').appendChild(bl);
+  $('#pbody').querySelectorAll('a.wl').forEach(a =>
+    a.onclick = () => openPage(a.dataset.p));
+  window.scrollTo(0, 0);
+}
+
+document.querySelectorAll('[data-f]').forEach(c => c.onclick = () => {
+  document.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === c));
+  FILT = c.dataset.f; $('#q').value = ''; drawList(); });
+
+let qt;
+$('#q').oninput = e => { clearTimeout(qt); const v = e.target.value.trim();
+  qt = setTimeout(async () => v ? drawList(await get('/search?q=' + encodeURIComponent(v)))
+    : drawList(), 250); };
+
+loadStatus(); loadStubs(); loadLint(); loadTags(); loadZotero(); loadWiki();
 </script>
 </body>
 </html>
