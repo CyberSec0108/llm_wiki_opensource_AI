@@ -252,6 +252,9 @@ const post = (p, d) => fetch('/api' + p, { method: 'POST',
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === b.dataset.t));
+  // 화면을 열 때마다 다시 읽는다 — .env 를 고치면 새로고침 없이 반영되도록
+  if (b.dataset.t === 'ing') drawIngest();
+  if (b.dataset.t === 's') loadStatus();
 });
 
 const AX = { 'ai-for-security': ['AI활용', 'a'], 'securing-ai': ['AI보호', 'b'],
@@ -487,6 +490,7 @@ $('#q').oninput = e => { clearTimeout(qt); const v = e.target.value.trim();
     : drawList(), 250); };
 
 loadStatus(); loadStubs(); loadLint(); loadTags(); loadZotero(); loadWiki();
+drawIngest();
 /* ===== 인제스트 ===== */
 const STEPS = ['읽기', '분석', '작성', '마무리'];
 let poll = null;
@@ -587,7 +591,7 @@ async function tick(jid) {
     x.innerHTML = '<h2>반영</h2>' + d.applied.map(a => JSON.stringify(a)).join('<br>');
     o.appendChild(x);
   }
-  if (d.done) { clearInterval(poll); poll = null; drawIngest(); load(); }
+  if (d.done) { clearInterval(poll); poll = null; drawIngest(); loadStatus(); }
 }
 
 </script>
