@@ -249,9 +249,11 @@ async function loadStatus() {
   } else $('#lintsum').textContent = '아직 실행한 적 없음';
 
   if (d.vault) {
-    const u = 'obsidian://open?vault=' + encodeURIComponent(d.vault);
-    $('#obs').href = u; $('#obsg').href = u;
-    $('#obsg').title = 'Obsidian이 열리면 좌측 사이드바의 그래프 아이콘을 누르세요';
+    const v = encodeURIComponent(d.vault);
+    $('#obs').href = 'obsidian://open?vault=' + v;
+    // Advanced URI 플러그인이 있으면 그래프까지 한 번에 열린다
+    $('#obsg').href = 'obsidian://adv-uri?vault=' + v + '&commandid=graph%3Aopen';
+    $('#obsg').title = 'Advanced URI 플러그인으로 그래프 뷰를 바로 엽니다';
   }
   const q = await get('/queue');
   $('#queue').textContent = q.items.length ? q.items.length + '건 대기 중' : '비어 있음';
