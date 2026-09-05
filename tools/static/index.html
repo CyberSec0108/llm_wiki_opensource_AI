@@ -559,6 +559,42 @@ async function drawIngest() {
     rv.open.forEach(x => { const e = el('div', 'rv'); e.innerHTML = x; rb.appendChild(e); }); }
 }
 
+async function showPlan(jid, o) {
+  const p = await get('/ingest/preview?jid=' + encodeURIComponent(jid));
+  const x = el('div', 'box');
+  let s = '<h2>편집안 ' + p.edits.length + '건</h2>';
+  p.edits.forEach(e => {
+    const grew = e.after - e.before;
+    s += '<div style="padding:8px 0;border-bottom:1px solid var(--line)">' +
+      '<b>' + e.page + '</b> <span class="pill">' + e.mode + '</span> ' +
+      '<span class="muted">' + e.before + ' → ' + e.after + '자 (' +
+      (grew >= 0 ? '+' : '') + grew + ') · 추가 ' + e.added + '줄 · 삭제 ' +
+      e.removed + '줄</span><br><small class="muted">' + (e.why || '') + '</small>';
+    // 지우는 줄이 있으면 반드시 보여준다. update 는 더하기만 해야 한다
+    if (e.removed_lines.length)
+      s += '<div class="warnbox" style="margin-top:7px"><b>지워지는 줄</b><br>' +
+        e.removed_lines.map(l => l.replace(/</g, '&lt;')).join('<br>') + '</div>';
+    s += '</div>';
+  });
+  if (p.review.length) {
+    s += '<h2 style="margin-top:14px">리뷰 큐로 미룰 것 ' + p.review.length + '건</h2>';
+    p.review.forEach(r => { s += '<div class="rv"><b>' + r.action + '</b> · ' +
+      (r.subject || '') + '<br><small class="muted">' + (r.detail || '') +
+      '</small></div>'; });
+  }
+  s += '<div class="note">log: ' + (p.log || '') + '</div>' +
+       '<button class="act pri" id="doapply" style="margin-top:10px">이대로 적용</button>';
+  x.innerHTML = s;
+  o.appendChild(x);
+  $('#doapply').onclick = async () => {
+    $('#doapply').disabled = true;
+    $('#doapply').textContent = '적용 중…';
+    const r = await post('/ingest/apply', { jid: jid });
+    if (!r.ok) { alert(r.error); $('#doapply').disabled = false; return; }
+    tick(jid); loadStatus(); loadLint();
+  };
+}
+
 async function startIngest(path, planOnly) {
   const r = await post('/ingest', { path: path, plan_only: planOnly ? 'true' : 'false' });
   if (r.error) { alert(r.error); return; }
@@ -598,9 +634,15 @@ async function tick(jid) {
         '건</b> &mdash; 리뷰 큐로 간다</div>';
     x.innerHTML = h; o.appendChild(x);
   }
+  if (d.plan && !d.applied) await showPlan(jid, o);
   if (d.applied) {
     const x = el('div', 'box');
-    x.innerHTML = '<h2>반영</h2>' + d.applied.map(a => JSON.stringify(a)).join('<br>');
+    x.innerHTML = '<h2>반영 완료</h2>' + d.applied.map(a =>
+      a.page ? ('· <b>' + a.page + '</b> ' + a.mode)
+      : a.review ? ('· 리뷰 큐 ' + a.review + '건')
+      : a.raw ? ('· 원본 ingested: true')
+      : ('· ' + JSON.stringify(a))).join('<br>') +
+      '<div class="note">위키가 바뀌었다. <code>/lint</code> 로 확인하는 것을 권한다.</div>';
     o.appendChild(x);
   }
   if (d.done) { clearInterval(poll); poll = null; drawIngest(); loadStatus(); }

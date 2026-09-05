@@ -464,6 +464,43 @@ def api_ingest_job(jid: str):
     return d
 
 
+@app.get('/api/ingest/preview')
+def api_ingest_preview(jid: str):
+    """계획이 무엇을 바꾸는지 미리 본다. 지우는 줄이 있는지가 핵심이다 —
+    `mode: update` 는 더하기만 해야 한다."""
+    import difflib
+    f = os.path.join(ROOT, 'reports', 'ingest-%s.json' % jid)
+    if not os.path.exists(f):
+        return JSONResponse({'error': '없는 작업'}, status_code=404)
+    d = json.loads(rd(f))
+    plan = d.get('plan') or {}
+    out = []
+    for e in plan.get('edits') or []:
+        q = os.path.join(ROOT, 'wiki', (e.get('page') or '') + '.md')
+        cur = rd(q) if os.path.exists(q) else ''
+        new = e.get('content') or ''
+        dl = list(difflib.unified_diff(cur.split(NL), new.split(NL), lineterm='', n=0))
+        rm = [l[1:] for l in dl if l.startswith('-') and not l.startswith('---') and l[1:].strip()]
+        out.append({
+            'page': e.get('page'), 'mode': e.get('mode'), 'why': e.get('why'),
+            'before': len(cur), 'after': len(new),
+            'added': len([l for l in dl if l.startswith('+') and not l.startswith('+++')]),
+            'removed': len(rm), 'removed_lines': rm[:12],
+        })
+    return {'edits': out, 'review': plan.get('review') or [],
+            'log': plan.get('log', ''), 'applied': d.get('applied')}
+
+
+@app.post('/api/ingest/apply')
+def api_ingest_apply(jid: str = Form(...)):
+    """확인한 계획을 그대로 적용한다. 다시 부르지 않는다 —
+    확인한 계획과 적용한 계획이 같아야 한다."""
+    try:
+        return {'ok': True, 'applied': ingest.apply_saved(jid)}
+    except SystemExit as e:
+        return JSONResponse({'ok': False, 'error': str(e)}, status_code=400)
+
+
 @app.get('/api/review')
 def api_review():
     """리뷰 큐 — 자동 인제스트가 판단을 미룬 것들."""
