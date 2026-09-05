@@ -57,7 +57,7 @@ tags: [meta]
 
 ## 만들 것
 
-- [ ] `tools/server.py` — FastAPI 골격 (`fastapi`·`uvicorn` 이미 설치됨)
+- [ ] `tools/server.py` — FastAPI 골격. 실행은 `python tools/server.py`
 - [ ] `tools/static/index.html` — 화면 한 장
 - [ ] **화면 A 상태판** — 페이지·원본·미인제스트·보강대기·stable 수, 축별 분포
 - [ ] **화면 B 자료 넣기** — 드래그 업로드 + Zotero 서지정보 가져오기 + 폼

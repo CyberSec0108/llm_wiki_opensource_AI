@@ -8,8 +8,9 @@
   3. 이 서버를 꺼도 Obsidian·git·Claude Code가 그대로 동작한다
 
 실행:
-    uvicorn tools.server:app --port 5000
-    uvicorn tools.server:app --port 5000 --host 0.0.0.0   # 같은 와이파이의 폰에서
+    python tools/server.py                  localhost:5000
+    python tools/server.py --port 8000
+    python tools/server.py --lan            같은 와이파이의 다른 기기에서 접속
 """
 import io, os, re, json, glob, shutil, sqlite3, tempfile, subprocess, datetime
 from fastapi import FastAPI, UploadFile, File, Form
@@ -262,3 +263,21 @@ def api_queue():
 @app.get('/', response_class=HTMLResponse)
 def index():
     return rd(os.path.join(ROOT, 'tools', 'static', 'index.html'))
+
+
+if __name__ == '__main__':
+    import sys, uvicorn
+    port = 5000
+    if '--port' in sys.argv:
+        port = int(sys.argv[sys.argv.index('--port') + 1])
+    host = '0.0.0.0' if '--lan' in sys.argv else '127.0.0.1'
+    print('  http://localhost:%d' % port)
+    if host == '0.0.0.0':
+        import socket
+        try:
+            ip = socket.gethostbyname(socket.gethostname())
+            print('  http://%s:%d   (같은 와이파이의 다른 기기)' % (ip, port))
+        except Exception:
+            pass
+    print('  종료: Ctrl+C')
+    uvicorn.run(app, host=host, port=port, log_level='warning')
