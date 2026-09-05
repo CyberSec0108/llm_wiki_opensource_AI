@@ -43,7 +43,8 @@ for p in sorted(glob.glob('wiki/*.md')):
     b = os.path.basename(p)[:-3]
     if b == 'CLAUDE' or '.example' in b:          # 규칙 문서·공개용 템플릿 제외
         continue
-    (ops if b in ('index', 'log') else active)[b] = load(p) + (p,)
+    # 운영 파일은 위키 페이지 규칙(축 접두어·한 줄 요약·링크 2개)을 따르지 않는다
+    (ops if b in ('index', 'log', 'review') else active)[b] = load(p) + (p,)
 
 arch = {}
 for p in glob.glob('wiki/_archive/*.md'):
@@ -158,7 +159,7 @@ head = idx_body[:idx_body.find('## 아직 없는 페이지')]
 listed = set(t.strip() for t in re.findall(r'\[\[([^\]|#]+)', re.sub(r'`[^`]*`', '', head)))
 for n in sorted(set(active) - listed):
     rep('E', 2, 'index 미등록: ' + n, 'wiki/index.md', '한 줄 추가')
-for n in sorted(listed - set(active) - set(['log'])):
+for n in sorted(listed - set(active) - set(['log', 'review'])):
     rep('E', 2, 'index에 있는데 파일 없음: ' + n, 'wiki/index.md', '줄 제거')
 for ln in idx_body.split(NL):
     mm = re.match(r'- \[\[([^\]]+)\]\].*\((\w+)\)\s*$', ln.strip())

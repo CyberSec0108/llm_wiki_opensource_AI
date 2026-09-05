@@ -227,7 +227,8 @@ STEP2 = """앞서 분석한 자료를 위키에 반영할 **편집안**을 만�
 
 규칙:
 - `mode: update`면 **기존 내용을 보존하고 더한다.** 지우지 마라.
-- 모든 주장에 출처 마커를 단다. 기사는 `^[%(marker)s]`, 논문·책은 `^[cite_key, 위치]`.
+- 모든 주장에 출처 마커를 단다. **이 자료의 마커는 `%(marker)s` 하나뿐이다.**
+  다른 형식을 섞지 마라 — `source:` 에 없는 마커를 쓰면 검사에서 오류가 난다.
 - `updated` 필드를 %(today)s 로 바꾼다.
 - 판단이 필요한 것은 `edits`가 아니라 `review`에 넣는다 — 모순, axis 불일치,
   생성 기준 애매, cite_key 미확정.
@@ -243,7 +244,10 @@ def run(rel, dry=False, plan_only=False, jid=None):
     system = build_system()
     pages, index = wiki_state()
     raw_text = rd(src)
-    marker = rel if rel.endswith('.md') else rel + '.md'
+    # 논문·책은 cite_key 로 인용한다(raw/CLAUDE.md). 없으면 경로를 쓴다.
+    _fm, _ = fm_body(rd(src))
+    _ck = fm_get(_fm, 'cite_key')
+    marker = ('^[' + _ck + ', 위치]') if _ck else ('^[' + rel + ']')
     today = datetime.date.today().isoformat()
 
     progress(jid, path=rel, stage='읽기', step=1, of=4, done=False,
@@ -352,6 +356,32 @@ def apply_plan(plan, rel, analysis):
     return applied
 
 
+def apply_saved(jid):
+    """이미 만들어 둔 계획을 그대로 적용한다.
+
+    `--plan-only` 로 계획을 보고 확인한 뒤 적용하는 흐름이다.
+    다시 돌리면 호출 값이 또 나가고 계획이 달라질 수 있다 —
+    **확인한 계획과 적용한 계획이 같아야 한다.**
+    """
+    f = os.path.join(REPORTS, 'ingest-%s.json' % jid)
+    if not os.path.exists(f):
+        raise SystemExit('없는 작업: ' + jid)
+    d = json.loads(rd(f))
+    if not d.get('plan'):
+        raise SystemExit('이 작업에는 계획이 없다 (단계: %s)' % d.get('stage'))
+    if d.get('applied'):
+        raise SystemExit('이미 적용됐다: ' + json.dumps(d['applied'], ensure_ascii=False))
+    applied = apply_plan(d['plan'], d['path'], d.get('analysis') or {})
+    progress(jid, stage='완료', done=True, applied=applied)
+    return applied
+
+
+def latest_jid():
+    fs = sorted(glob.glob(os.path.join(REPORTS, 'ingest-*.json')),
+                key=os.path.getmtime)
+    return os.path.basename(fs[-1])[7:-5] if fs else None
+
+
 if __name__ == '__main__':
     try:
         sys.stdout.reconfigure(encoding='utf-8')  # 윈도우 콘솔은 기본이 cp949다
@@ -359,7 +389,10 @@ if __name__ == '__main__':
         pass
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     flags = set(a for a in sys.argv[1:] if a.startswith('--'))
-    if not args:
+    if '--apply' in flags:
+        jid = args[0] if args else latest_jid()
+        print(json.dumps(apply_saved(jid), ensure_ascii=False, indent=2))
+    elif not args:
         q = pending()
         s = llm.status()
         print('LLM  %s' % ('준비됨 · ' + s.get('model', '') if s['ok'] else '없음 — ' + s['why']))
