@@ -27,16 +27,16 @@
 </header>
 
 <main>
-  <!-- 상태판 -->
+  <!-- 대시보드 -->
   <section id="s" class="on">
     <div class="cards" id="stats"></div>
     <div class="dashboard-grid">
-      <div class="box"><h2>연구 축</h2><div class="bar" id="axisbar"></div>
+      <div class="box"><h2>분석 주제 (연구 축)</h2><div class="bar" id="axisbar"></div>
         <div class="chips" id="axislbl" style="margin-top:9px"></div></div>
-      <div class="box"><h2>마지막 점검</h2><div id="lintsum" class="muted">불러오는 중…</div></div>
+      <div class="box"><h2>최근 품질 진단</h2><div id="lintsum" class="muted">불러오는 중…</div></div>
       <div class="box span-full">
         <details class="dashboard-details" open>
-          <summary><h2>다음에 만들 페이지</h2></summary>
+          <summary><h2>작성 대기 문서 (Stubs)</h2></summary>
           <div class="details-content">
             <div id="stubs"></div>
             <div class="note">참조 횟수만 센 것이다. <b>원본 근거 1,200B와 사례 유무</b>는 <code>/lint</code>에서 확인한다.</div>
@@ -45,7 +45,7 @@
       </div>
       <div class="box span-full">
         <details class="dashboard-details" open>
-          <summary><h2>인제스트 대기열</h2></summary>
+          <summary><h2>지식화 처리 대기열</h2></summary>
           <div class="details-content">
             <div id="queue" class="muted"></div>
             <div class="note">웹 UI가 접수하고 <code>/ingest</code>가 처리한다.</div>
@@ -55,14 +55,14 @@
     </div>
   </section>
 
-  <!-- 자료 넣기 -->
+  <!-- 데이터 등록 -->
   <section id="add">
     <div class="box">
-      <h2>Zotero에서 가져오기</h2>
+      <h2>외부 소스 연동 (Zotero)</h2>
       <div id="zot" class="muted">불러오는 중…</div>
     </div>
     <div class="box">
-      <h2>정본 만들기</h2>
+      <h2>신규 데이터 수동 등록</h2>
       <div class="two">
         <div><label>종류</label>
           <select id="f_kind">
@@ -103,14 +103,14 @@
     </div>
   </section>
 
-  <!-- 위키 -->
+  <!-- 지식베이스 -->
   <section id="wiki">
     <div class="split">
       <div class="box" style="margin-top:0">
-        <input id="q" placeholder="검색 (본문까지)" style="margin-bottom:10px">
+        <input id="q" placeholder="지식베이스 내 검색 (본문 포함)" style="margin-bottom:10px">
         <div class="chips" style="margin-bottom:6px">
           <span class="chip on" data-layer="">전체</span>
-          <span class="chip" data-layer="wiki">위키</span>
+          <span class="chip" data-layer="wiki">지식베이스</span>
           <span class="chip" data-layer="raw">원본</span>
         </div>
         <div class="chips" style="margin-bottom:9px">
@@ -131,31 +131,31 @@
     </div>
   </section>
 
-  <!-- 인제스트 -->
+  <!-- 지식화 처리 -->
   <section id="ing">
     <div id="llmbox"></div>
-    <div class="box"><h2>대기 중인 자료</h2><div id="pend" class="muted">불러오는 중…</div>
+    <div class="box"><h2>처리 대기 중인 데이터</h2><div id="pend" class="muted">불러오는 중…</div>
       <div class="note">터미널의 <code>/ingest</code>와 <b>같은 규칙</b>을 쓴다 —
         <code>CLAUDE.md</code>와 <code>SKILL.md</code>를 읽어서 프롬프트로 넣는다.</div></div>
-    <div class="box" id="jobbox" style="display:none"><h2>진행</h2>
+    <div class="box" id="jobbox" style="display:none"><h2>파이프라인 진행 상태</h2>
       <div class="steps" id="steps"></div>
       <div id="jobmsg" class="muted"></div>
       <div id="jobout"></div></div>
-    <div class="box"><h2>리뷰 큐</h2><div id="review" class="muted"></div>
+    <div class="box"><h2>검토 대기열 (Review Queue)</h2><div id="review" class="muted"></div>
       <div class="note">자동으로 넘기지 않은 <b>판단이 필요한 것들.</b>
         인제스트를 막지 않는다 — 편할 때 처리하면 된다.</div></div>
   </section>
 
-  <!-- 질문 -->
+  <!-- AI 탐색 -->
   <section id="query">
     <div class="qshell" id="qshell">
       <!-- 왼쪽: 내 대화 (목업 — 저장 기능은 아직 없다) -->
       <aside class="qhist">
         <div class="qhist-top">
-          <h2>내 대화</h2><span id="qhist-count">0건</span>
+          <h2>탐색 히스토리</h2><span id="qhist-count">0건</span>
         </div>
-        <button class="act newbtn" id="qnew">＋ 새 질문</button>
-        <label for="qhist-search">대화 검색</label>
+        <button class="act newbtn" id="qnew">＋ 새로운 탐색</button>
+        <label for="qhist-search">히스토리 검색</label>
         <input id="qhist-search" placeholder="제목으로 찾기" disabled>
         <label for="qhist-filter">목록</label>
         <select id="qhist-filter" disabled>
@@ -212,7 +212,7 @@
     </div>
   </section>
 
-  <!-- 점검 -->
+  <!-- 품질 진단 -->
   <section id="lint">
     <div class="box">
       <div style="display:flex;align-items:center;gap:12px">

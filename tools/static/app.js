@@ -68,7 +68,7 @@ const AX = { 'ai-for-security': ['AI활용', 'a'], 'securing-ai': ['AI보호', '
 
 async function loadStatus() {
   const d = await get('/status');
-  const cards = [['페이지', d.pages], ['원본', d.raw], ['미인제스트', d.pending],
+  const cards = [['페이지', d.pages], ['원본', d.raw], ['처리 대기', d.pending],
                  ['보강대기', d.needs_source], ['stable', d.stable], ['대기열', d.queue]];
   $('#stats').innerHTML = '';
   cards.forEach(([k, v]) => { const c = el('div', 'stat');
@@ -202,7 +202,7 @@ async function save(q) {
 }
 
 let PAGES = [], FILT = '', LAYER = '';
-const LAYNAME = { wiki: '위키', raw: '원본', context: '맥락', docs: '문서' };
+const LAYNAME = { wiki: '지식베이스', raw: '원본', context: '맥락', docs: '문서' };
 const layName = k => LAYNAME[k] || k;
 
 async function loadWiki() {
@@ -257,7 +257,7 @@ async function openPage(name) {
   t.appendChild(el('b', '', d.name));
   if (d.meta.status) t.appendChild(el('span', 'pill', d.meta.status));
   if (d.layer === 'raw') {
-    t.appendChild(el('span', 'pill', d.meta.ingested === 'true' ? '반영됨' : '미인제스트'));
+    t.appendChild(el('span', 'pill', d.meta.ingested === 'true' ? '지식화 완료' : '처리 대기'));
     if (d.meta.axis) t.appendChild(el('span', 'pill', d.meta.axis));
   }
   if (d.meta.needs_source === 'true') t.appendChild(el('span', 'pill', '보강필요'));
@@ -352,7 +352,7 @@ function drawWelcome() {
 
 // ── 턴 단위 요소 ──
 function qSteps(n, stepIdx) {
-  const STEPS = ['질문 확인', '위키 후보 찾기', '답변 작성'];
+  const STEPS = ['탐색 의도 확인', '지식베이스 검색', '결과 도출'];
   let wrap = document.getElementById('qsteps-' + n);
   if (!wrap) {
     wrap = el('div', 'gen'); wrap.id = 'qsteps-' + n;
@@ -485,7 +485,7 @@ function qSrcRender(n, rows, note) {
       if (r.derived) meta.push('파생 페이지');
       card.appendChild(el('p', '', meta.filter(Boolean).join(' · ')));
     }
-    const a = el('a', '', '위키에서 열기 ↗');
+    const a = el('a', '', '지식베이스에서 열기 ↗');
     a.href = '/?tab=wiki&page=' + encodeURIComponent(r.page);
     a.target = '_blank'; a.rel = 'noopener';
     card.appendChild(a);
@@ -622,15 +622,15 @@ function finishAnswer(n, r) {
 
   if (r.in_wiki === false) {
     const w = el('div', 'warnbox');
-    w.innerHTML = '<b>위키에 없음</b><br>' + (r.missing || '이 볼트에 근거가 없다.');
+    w.innerHTML = '<b>지식베이스에 없음</b><br>' + (r.missing || '이 볼트에 근거가 없다.');
     $('#qout').appendChild(w);
   }
   if ((r.sources || []).length) qSrcRender(n, r.sources);
-  else $('#qsrc-body').innerHTML = '<p class="muted">이 답변은 위키 페이지를 인용하지 않았다.</p>';
+  else $('#qsrc-body').innerHTML = '<p class="muted">이 답변은 지식베이스를 인용하지 않았습니다.</p>';
 
   if (r.suggest_collect) {
     const c = el('div', 'note');
-    c.innerHTML = '<b>모으면 좋을 자료</b><br>' + r.suggest_collect;
+    c.innerHTML = '<b>추가 수집 필요 데이터</b><br>' + r.suggest_collect;
     $('#qout').appendChild(c);
   }
   if (r.answer) {
@@ -681,7 +681,7 @@ $('#qnew').onclick = () => {
   $('#qq').value = '';
   $('#qout').innerHTML = '';
   $('#qhead-title').textContent = '무엇을 확인하고 싶으신가요?';
-  $('#qsrc-body').innerHTML = '<p class="muted">답변이 나오면 사용한 위키 페이지가 여기 표시된다.</p>';
+  $('#qsrc-body').innerHTML = '<p class="muted">답변이 나오면 참조한 지식베이스가 여기 표시됩니다.</p>';
   qSrcOpen(false);
   drawWelcome();
   $('#qq').focus();
@@ -698,7 +698,7 @@ async function drawIngest() {
   b.innerHTML = '';
   if (!L.ok) {
     const w = el('div', 'warnbox');
-    w.innerHTML = '<b>LLM 키가 없어 인제스트를 실행할 수 없다.</b><br>' +
+    w.innerHTML = '<b>LLM 키가 없어 지식화 처리를 실행할 수 없습니다.</b><br>' +
       '1. <a href="' + (L.signup || '#') + '" target="_blank">' + (L.signup || '') +
       '</a> 에서 키를 발급받는다<br>' +
       '2. <code>' + (L.env_path || '.env') + '</code> 를 열어 ' +
@@ -741,7 +741,7 @@ async function drawIngest() {
       r.appendChild(t);
       const g = el('button', 'act', '계획만');
       g.onclick = () => startIngest(it.path, true);
-      const bt = el('button', 'act pri', '인제스트');
+      const bt = el('button', 'act pri', '지식화 처리');
       bt.onclick = () => startIngest(it.path, false);
       if (!L.ok) { g.disabled = bt.disabled = true; }
       r.appendChild(g); r.appendChild(bt);
@@ -839,7 +839,7 @@ async function tick(jid) {
       : a.review ? ('· 리뷰 큐 ' + a.review + '건')
       : a.raw ? ('· 원본 ingested: true')
       : ('· ' + JSON.stringify(a))).join('<br>') +
-      '<div class="note">위키가 바뀌었다. <code>/lint</code> 로 확인하는 것을 권한다.</div>';
+      '<div class="note">지식베이스가 변경되었습니다. <code>/lint</code> 로 확인하는 것을 권한다.</div>';
     o.appendChild(x);
   }
   if (d.done) { clearInterval(poll); poll = null; drawIngest(); loadStatus(); }
