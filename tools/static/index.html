@@ -152,7 +152,13 @@
       <!-- 왼쪽: 내 대화 (목업 — 저장 기능은 아직 없다) -->
       <aside class="qhist">
         <div class="qhist-top">
-          <h2>탐색 히스토리</h2><span id="qhist-count">0건</span>
+          <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+            <div style="display:flex; align-items:center; gap:8px">
+              <button class="act" id="qhist-toggle" title="사이드바 토글" style="padding:4px; font-size:16px; width:30px; height:30px; border-radius:5px; flex:none;">☰</button>
+              <h2 class="qhist-title" style="margin:0;">탐색 히스토리</h2>
+            </div>
+            <span id="qhist-count" class="qhist-title">0건</span>
+          </div>
         </div>
         <button class="act newbtn" id="qnew">＋ 새로운 탐색</button>
         <label for="qhist-search">히스토리 검색</label>

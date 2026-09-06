@@ -285,11 +285,11 @@
 
   /* 오른쪽 — 출처 드로어 */
   .qsrc{background:var(--card);border-left:1px solid var(--line);padding:16px 18px;
-    height:100%;overflow-y:auto;display:block; position:absolute; right:0; top:0; bottom:0; width:310px; z-index:10; transform:translateX(100%); transition:transform 0.2s ease;
-    box-shadow: -4px 0 24px rgba(13,34,51,0.08);}
-  .qshell.src-open .qsrc{transform:translateX(0);}
+    height:100%;overflow-y:auto;display:none; width:310px; transition:transform 0.2s ease;}
+  .qshell.src-open .qsrc{display:block;}
   @media(max-width:860px){
-    .qsrc{width:100%; border-left:0;}
+    .qsrc{position:absolute; right:0; top:0; bottom:0; width:100%; z-index:10; transform:translateX(100%); box-shadow: -4px 0 24px rgba(13,34,51,0.08); display:block; border-left:0;}
+    .qshell.src-open .qsrc{transform:translateX(0);}
   }
   .qsrc-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
   .qsrc-top p{color:var(--acc);font-size:11.5px;font-weight:700;margin:0}
