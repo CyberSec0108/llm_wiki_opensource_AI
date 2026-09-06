@@ -217,7 +217,7 @@
   }
 
   /* 왼쪽 — 내 대화 */
-  .qhist{background:var(--bg);border-right:1px solid var(--line);
+  .qhist{background:var(--muted);border-right:1px solid var(--line);
     padding:16px;height:100%;overflow-y:auto;display:flex;flex-direction:column}
   .qhist-top{display:flex;align-items:center;justify-content:space-between;
     margin-bottom:12px}
@@ -284,14 +284,14 @@
   .qsend:disabled{opacity:.45;cursor:not-allowed}
 
   /* 오른쪽 — 출처 드로어 */
-  .qsrc{background:var(--card);border-left:1px solid var(--line);padding:16px 18px;
+  .qsrc{background:var(--muted);border-left:1px solid var(--line);padding:16px 18px;
     height:100%;overflow-y:auto;display:none; width:310px; transition:transform 0.2s ease;}
   .qshell.src-open .qsrc{display:block;}
   @media(max-width:860px){
     .qsrc{position:absolute; right:0; top:0; bottom:0; width:100%; z-index:10; transform:translateX(100%); box-shadow: -4px 0 24px rgba(13,34,51,0.08); display:block; border-left:0;}
     .qshell.src-open .qsrc{transform:translateX(0);}
   }
-  .qsrc-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .qsrc-top{display:flex;align-items:center;gap:8px;padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:0}
   .qsrc-top p{color:var(--acc);font-size:11.5px;font-weight:700;margin:0}
   .qsrc-top h2{font-size:15px;margin:0;font-weight:650}
   .qsrc-close{margin-left:auto;width:28px;height:28px;padding:0;border-radius:7px;
