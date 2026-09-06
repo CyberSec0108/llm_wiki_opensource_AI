@@ -387,3 +387,5 @@
   .zot-att{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
   .zot-att .pill{font-size:11px;padding:2px 8px;text-decoration:none;cursor:pointer}
   .zot-att .pill.muted{opacity:.5;cursor:not-allowed}
+
+.list-divider{border:0;border-top:1px solid var(--line);margin:14px 0;}
