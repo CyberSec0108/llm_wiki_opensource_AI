@@ -87,3 +87,4 @@ wiki/review.md
 # LLM 설정·키 — 절대 커밋하지 않는다
 .env
 !.env.example
+docs/
