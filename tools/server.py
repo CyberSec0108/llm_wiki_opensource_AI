@@ -485,7 +485,9 @@ def api_graph():
         if b in ('index', 'log', 'review', 'CLAUDE') or '.example' in b:
             continue
         rel = os.path.relpath(p, ROOT).replace(chr(92), '/')
-        if rel.startswith('context/'):
+        # context/ 는 개인 맥락, docs/ 는 이 도구에 대한 메타 문서다.
+        # 둘 다 지식 노드가 아니다 — 섞이면 축 없는 고립 점이 생긴다
+        if rel.startswith(('context/', 'docs/')):
             continue
         valid_names.add(b)
         
