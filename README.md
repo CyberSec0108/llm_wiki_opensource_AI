@@ -238,6 +238,18 @@ AI 도구에게 아래와 같이 요청합니다:
 pip install -r requirements.txt
 ```
 
+| 패키지 | 쓰는 곳 |
+|---|---|
+| `fastapi` · `uvicorn` | 웹 UI 서버 |
+| `python-multipart` | 「자료 넣기」 탭의 파일 업로드 |
+| `markdown` | 「위키」 탭의 읽기 전용 렌더 |
+| `openai` | OpenRouter 호출 (OpenAI 호환 API) |
+| `anthropic` | Anthropic 직접 호출 |
+
+> LLM 제공자 두 개는 **`.env`의 `LLM_PROVIDER`에 맞는 것 하나만** 있으면 됩니다.
+> `requirements.txt`의 주석이 영어인 이유는 pip이 이 파일을 **OS 기본 인코딩**으로 읽기 때문입니다
+> (한글 Windows는 cp949 → 한글 주석이 있으면 설치가 깨집니다).
+
 ### 2) 키·모델 설정
 
 `.env.example`을 `.env`로 복사한 뒤 키를 채웁니다. **설정은 이 파일 하나가 정본입니다.**
@@ -257,9 +269,12 @@ OPENROUTER_API_KEY=sk-or-...
 
 | 모델 | 1건 비용 | 비고 |
 |---|---|---|
-| `z-ai/glm-5.3-flash` | **$0.007** | 가장 쌉니다. 1.31M 컨텍스트. 실측 통과 |
-| `google/gemini-3.7-flash` | ~$0.09 | 품질이 아쉬울 때 |
-| `anthropic/claude-sonnet-4.5` | ~$0.35 | 어려운 논문용 |
+| `anthropic/claude-sonnet-4.5` | ~$0.35 | **기본값.** 어려운 논문까지 무난합니다 |
+| `google/gemini-3.7-flash` | ~$0.09 | 중간 |
+| `z-ai/glm-5.3-flash` | **$0.007** | 가장 쌉니다. 1.31M 컨텍스트 |
+
+> 비용을 먼저 줄이고 싶다면 `LLM_MODEL=z-ai/glm-5.3-flash`로 시작해도 됩니다.
+> 위 실측치($0.0074 / 약 5분 / 논문 1건)가 이 모델로 측정한 값입니다.
 
 > **모델 선택 주의**: 반드시 **structured outputs(`json_schema`)를 지원하는 모델**이어야 합니다.
 > 스키마 없이 부르면 JSON 대신 YAML이나 산문을 뱉는 모델이 있습니다(실측 확인).

@@ -1,12 +1,16 @@
-# 로컬 웹 UI(tools/server.py)와 LLM 파이프라인에 필요한 것들.
+# Dependencies for the optional local web UI (tools/server.py) and the LLM pipeline.
 #   pip install -r requirements.txt
-# Obsidian·git·Claude Code만 쓸 거라면 설치하지 않아도 된다.
+# Not needed if you only use Obsidian + git + Claude Code skills.
+#
+# NOTE: ASCII only. pip reads this file with the OS default encoding
+# (cp949 on Korean Windows), so non-ASCII comments break the install.
+# Korean explanations live in README.md instead.
 
 fastapi>=0.110
 uvicorn>=0.27
-python-multipart>=0.0.9   # 자료 넣기 폼의 파일 업로드
-markdown>=3.5             # 위키 탭의 읽기 전용 렌더
+python-multipart>=0.0.9   # file upload on the "add source" form
+markdown>=3.5             # read-only rendering in the wiki tab
 
-# LLM 제공자 — .env 의 LLM_PROVIDER 에 맞는 것만 있으면 된다
-openai>=1.30              # openrouter (OpenAI 호환 API)
-anthropic>=0.40           # anthropic 직접 호출
+# LLM providers -- you only need the one matching LLM_PROVIDER in .env
+openai>=1.30              # openrouter (OpenAI-compatible API)
+anthropic>=0.40           # anthropic direct
