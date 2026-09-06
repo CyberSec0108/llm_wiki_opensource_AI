@@ -6,6 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Architecture: 4--Layer](https://img.shields.io/badge/Architecture-4--Layer-success)]()
 [![AI Powered](https://img.shields.io/badge/AI-Claude%20%7C%20Gemini%20%7C%20GPT-orange)]()
+[![Web UI](https://img.shields.io/badge/Web%20UI-optional-lightgrey)]()
 
 ---
 
@@ -17,11 +18,12 @@
    - [Step 2. Obsidian 설치 및 볼트 열기](#step-2-obsidian-설치-및-볼트-열기)
    - [Step 3. 초기 환경 및 나만의 맥락 설정](#step-3-초기-환경-및-나만의-맥락-설정)
    - [Step 4. AI 에이전트 도구 연동](#step-4-ai-에이전트-도구-연동)
-   - [Step 5. 웹 클리퍼(Web Clipper) 연동](#step-5-웹-클리퍼web-clipper-연동)
+   - [Step 5. 자료 수집 도구 설정 (웹 클리퍼 & Zotero)](#step-5-자료-수집-도구-설정-웹-클리퍼--zotero)
    - [Step 6. 실전 사용 워크플로우 (튜토리얼)](#step-6-실전-사용-워크플로우-튜토리얼)
-4. [📂 폴더 구조 안내](#-폴더-구조-안내)
-5. [🔒 프라이버시 및 보안 원칙](#-프라이버시-및-보안-원칙)
-6. [📚 상세 설계 문서](#-상세-설계-문서)
+4. [🖥 로컬 웹 UI (선택)](#-로컬-웹-ui-선택)
+5. [📂 폴더 구조 안내](#-폴더-구조-안내)
+6. [🔒 프라이버시 및 보안 원칙](#-프라이버시-및-보안-원칙)
+7. [📚 상세 설계 문서](#-상세-설계-문서)
 
 ---
 
@@ -68,6 +70,20 @@ AI에게 특정 작업을 지시할 때 표준화된 3가지 스킬을 사용합
 1. **`ingest` (흡수·정리)**: `raw/`에 새로 들어온 자료를 분석하여 위키 페이지를 생성하거나 기존 페이지를 갱신합니다. (기존 페이지 우선 갱신 원칙)
 2. **`query` (질의·추론)**: 위키 카탈로그(`wiki/index.md`)를 통해 관련 지식을 탐색하고, 명확한 근거 링크(`[[링크]]`)와 함께 답변합니다.
 3. **`lint` (건강검진)**: 백링크가 없는 고아 페이지, 깨진 링크, 원문 대비 과도한 해석(팽창률), 출처 부족 페이지를 전수 진단합니다.
+
+### 3. 같은 연산을 부르는 3가지 방법
+
+세 연산은 **하나의 규칙**(`CLAUDE.md` + `.claude/skills/*/SKILL.md`)을 공유합니다.
+파이프라인 코드는 그 규칙을 **복사하지 않고 읽어서** 프롬프트로 씁니다.
+따라서 어느 경로로 부르든 결과가 같습니다.
+
+| 부르는 방법 | 예시 | LLM 키 | 언제 쓰나 |
+|---|---|---|---|
+| **AI 에이전트 스킬** | Claude Code에서 `/ingest` | 도구가 이미 가진 것 | 대화하며 판단이 필요할 때 |
+| **CLI 스크립트** | `python tools/query.py "질문"` | `.env` | 자동화·반복 작업 |
+| **로컬 웹 UI** | `python tools/server.py` → 브라우저 | `.env` | 클릭으로 실행·결과 확인 |
+
+> `lint`만은 LLM이 필요 없습니다 — `tools/lint.py`는 순수 정적 분석입니다.
 
 ---
 
@@ -167,6 +183,9 @@ LLM Wiki는 2가지 수집 파이프라인을 통해 지식을 축적합니다:
 자료 수집(raw/) ──> /ingest ──> 지식 축적(wiki/) ──> /query & Output ──> /lint 점검
 ```
 
+> 아래는 **AI 에이전트에게 대화로 지시하는** 방법입니다.
+> 같은 사이클을 브라우저에서 클릭으로 돌리고 싶다면 [로컬 웹 UI](#-로컬-웹-ui-선택)를 보세요.
+
 #### ① 자료 수집
 웹 클리퍼나 Zotero를 통해 `raw/inbox/` 또는 `raw/articles/`, `raw/papers/` 등에 자료를 수집합니다.
 
@@ -207,6 +226,94 @@ AI 도구에게 아래와 같이 요청합니다:
 
 ---
 
+## 🖥 로컬 웹 UI (선택)
+
+**이 볼트는 웹 UI 없이도 완전히 동작합니다.** Obsidian·git·Claude Code만으로 충분합니다.
+웹 UI는 *Obsidian이 못 하는 것*, 즉 **연산을 실행하고 결과를 보는 일**만 담당합니다.
+읽기·검색은 넣되 **편집과 그래프는 만들지 않고** `obsidian://` 링크로 넘깁니다.
+
+### 1) 설치
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2) 키·모델 설정
+
+`.env.example`을 `.env`로 복사한 뒤 키를 채웁니다. **설정은 이 파일 하나가 정본입니다.**
+
+```bash
+cp .env.example .env      # Windows PowerShell: copy .env.example .env
+```
+
+```ini
+LLM_PROVIDER=openrouter          # openrouter | anthropic
+LLM_MODEL=anthropic/claude-sonnet-4.5   # OpenRouter는 키 하나로 여러 모델을 씁니다
+LLM_REASONING=low                # low | medium | high | none
+OPENROUTER_API_KEY=sk-or-...
+```
+
+**모델별 인제스트 1건 실측** (논문 1건, 입력 43K · 출력 17K 기준):
+
+| 모델 | 1건 비용 | 비고 |
+|---|---|---|
+| `z-ai/glm-5.3-flash` | **$0.007** | 가장 쌉니다. 1.31M 컨텍스트. 실측 통과 |
+| `google/gemini-3.7-flash` | ~$0.09 | 품질이 아쉬울 때 |
+| `anthropic/claude-sonnet-4.5` | ~$0.35 | 어려운 논문용 |
+
+> **모델 선택 주의**: 반드시 **structured outputs(`json_schema`)를 지원하는 모델**이어야 합니다.
+> 스키마 없이 부르면 JSON 대신 YAML이나 산문을 뱉는 모델이 있습니다(실측 확인).
+> 최신 목록·가격은 [openrouter.ai/models](https://openrouter.ai/models)에서 확인하세요.
+
+> **추론 토큰 주의**: 추론 모델은 "생각"이 출력 토큰에 포함됩니다.
+> 기본 설정에서 첫 답변 토큰까지 **47초**가 걸린 적이 있고, 그 중 청크 1,437개가 전부 생각이었습니다.
+> 그래서 `LLM_REASONING=low`로 시작합니다. 답변 품질이 아쉬우면 `medium`으로 올리세요.
+
+연결이 되는지 먼저 싸게 확인합니다:
+
+```bash
+python tools/llm.py test
+```
+
+### 3) 실행
+
+```bash
+python tools/server.py              # http://localhost:5000
+python tools/server.py --port 8000
+python tools/server.py --lan        # 같은 와이파이의 다른 기기에서 접속
+```
+
+### 4) 탭 구성
+
+| 탭 | 하는 일 |
+|---|---|
+| **상태판** | 페이지 수, 연구 축 분포, 마지막 lint 결과, 다음에 만들 페이지 |
+| **자료 넣기** | Zotero 라이브러리에서 가져오거나 URL·파일로 `raw/`에 추가 |
+| **위키** | 위키·원본 읽기 전용 뷰어 + 본문 검색. 편집은 `obsidian://`로 넘김 |
+| **인제스트** | 대기 중인 자료를 확인하고 실행 → **적용 전에 diff를 먼저 보여줌**. 특히 *지워지는 줄*을 따로 뽑아줍니다 |
+| **질문** | 위키를 근거로 질의. 토큰 스트리밍·추론 과정 표시·중단·출처 드로어 |
+| **점검** | lint 실행 및 심각도별 결과. 예외 처리는 `lint-ignore.json`에 파일로 남음 |
+
+### 5) 설계상의 제약 (의도적)
+
+- **파일이 정본입니다.** 서버가 만드는 상태도 전부 파일입니다 — `queue.md`, `lint-ignore.json`, `reports/`. DB는 쓰지 않습니다.
+- **규칙을 코드에 복사하지 않습니다.** `tools/ingest.py`는 `CLAUDE.md`와 `SKILL.md`를 **읽어서** 프롬프트로 씁니다. 규칙을 고치면 웹 UI도 같이 바뀝니다.
+- **서버를 꺼도** Obsidian·git·Claude Code가 그대로 동작합니다.
+- **인제스트는 자동 반영하지 않습니다.** 결과를 먼저 보여주고, 적용은 사용자가 누릅니다.
+
+### 6) UI 회귀 검사
+
+브라우저 없이 확인할 수 있게 Node의 `vm`으로 가짜 DOM을 만들어 검사합니다.
+(외부 의존성 없음 — Node만 있으면 됩니다.)
+
+```bash
+node tools/test/syntax.js     # 인라인 스크립트 파싱
+node tools/test/render.js     # 답변 렌더 + 대화가 아래로 쌓이는지
+node tools/test/wikilist.js   # 목록 제목 자르기 + 폭 조절 손잡이
+```
+
+---
+
 ## 📂 폴더 구조 안내
 
 ```text
@@ -220,7 +327,9 @@ AI 도구에게 아래와 같이 요청합니다:
 │   ├── 나의 핵심 맥락.example.md  # 사용자 정체성 템플릿
 │   └── 지금 하는 일.example.md    # 현재 작업 현황 템플릿
 ├── docs/
-│   └── 설계.md           # 볼트의 4계층 아키텍처 및 상세 설계 배경
+│   ├── 설계.md           # 볼트의 4계층 아키텍처 및 상세 설계 배경
+│   ├── 웹UI 계획.md      # 웹 UI 단계별 계획 — 무엇을 만들고 무엇은 안 만드나
+│   └── 질문 탭 개편 계획.md
 ├── raw/                  # 불변의 원본 수집 자료
 │   ├── articles/         # 기술 아티클 원본
 │   ├── books/            # 도서 서지정보 및 요약
@@ -233,12 +342,22 @@ AI 도구에게 아래와 같이 요청합니다:
 ├── templates/            # 새 문서 생성을 위한 템플릿
 │   ├── clipper/          # 웹 클리퍼용 JSON 템플릿 6종
 │   └── ...               # 위키/산출물 템플릿
+├── tools/                # CLI 스크립트 + 로컬 웹 UI (선택 사용)
+│   ├── llm.py            # 제공자를 아는 유일한 파일 (.env 를 읽는다)
+│   ├── ingest.py         # ingest 파이프라인 — SKILL.md 를 읽어 프롬프트로 쓴다
+│   ├── query.py          # query 파이프라인 (CLI + 웹 스트리밍)
+│   ├── lint.py           # lint — LLM 없이 도는 정적 분석
+│   ├── server.py         # 웹 UI 서버 (FastAPI)
+│   ├── static/           # 단일 페이지 프런트엔드 (빌드 도구 없음)
+│   └── test/             # 브라우저 없는 UI 회귀 검사 (Node vm)
 ├── wiki/                 # 컴파일된 핵심 지식 계층
 │   ├── _archive/         # 폐기/대체된 문서 보관소
 │   ├── index.example.md  # 위키 전체 목차 템플릿
 │   ├── log.example.md    # 작업 일지 템플릿
 │   └── CLAUDE.md         # 위키 작성 및 유지 규칙
 ├── CLAUDE.md             # 루트 시스템 규칙 및 AI 행동 강령
+├── .env.example          # LLM 키·모델 설정 견본 (.env 는 커밋되지 않는다)
+├── requirements.txt      # 웹 UI·파이프라인 파이썬 의존성
 ├── .gitignore            # 개인정보 및 사용자 수집/작성 데이터 보호
 └── README.md             # 프로젝트 소개 및 가이드
 ```
@@ -248,11 +367,14 @@ AI 도구에게 아래와 같이 요청합니다:
 ## 🔒 프라이버시 및 보안 원칙
 
 - **로컬 퍼스트 (Local-First)**: 모든 원본 자료, 위키 지식, 개인 정보는 사용자의 로컬 컴퓨터에만 머무릅니다.
+  - 웹 UI 서버도 기본이 `127.0.0.1`이라 **바깥에서 접속할 수 없습니다.** `--lan`을 직접 붙였을 때만 같은 네트워크에 열립니다.
+  - 다만 `ingest`·`query`는 **LLM 제공자에게 본문을 보냅니다.** 민감한 자료라면 어떤 모델을 쓰는지 먼저 확인하세요.
 - **강력한 `.gitignore` 보호**:
   - `wiki/*.md` (사용자가 작성한 지식 문서)
   - `raw/*/*` (사용자가 수집한 기사, 책, 논문 등 원본 데이터)
   - `context/나의 핵심 맥락.md`, `context/지금 하는 일.md` (개인 신상 및 진행 업무)
   - `Output/*` (사용자의 최종 산출물)
+  - `.env` (LLM API 키) — `.env.example`만 공유됩니다
   위 파일들은 `.gitignore`에 의해 완벽히 보호되므로, 사용자가 마음껏 위키를 채우고 작업하더라도 실수로 GitHub 원격 저장소에 업로드되지 않습니다.
 
 ---
