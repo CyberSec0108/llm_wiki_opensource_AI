@@ -382,3 +382,8 @@
   .doc a.wl, .steps div.on, .lay-wiki, .src a, .qhead-label,
   .qwelcome button, .qsrc-top p, .gen li[data-state="active"],
   .scard-num, .scard a{color:var(--acc-t)}
+
+  /* Zotero 항목의 첨부 링크 — 제목 아래 작은 알약으로 붙인다 */
+  .zot-att{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .zot-att .pill{font-size:11px;padding:2px 8px;text-decoration:none;cursor:pointer}
+  .zot-att .pill.muted{opacity:.5;cursor:not-allowed}

@@ -214,10 +214,42 @@ def api_zotero():
         m = re.search(r'^cite_key:\s*(.+)$', fm_of(rd(os.path.join(ROOT, r['path']))), re.M)
         if m:
             have.add(m.group(1).strip())
+    # 휴지통에 넣은 항목은 빼야 한다 — 지운 논문이 '신규'로 다시 떠서
+    # 정본을 두 번 만들게 된다
+    trashed = set(r[0] for r in q('SELECT itemID FROM deletedItems'))
+
+    # 첨부(PDF·스냅샷)는 한 번에 읽어 부모별로 묶는다.
+    # 항목마다 따로 질의하면 라이브러리가 커질수록 느려진다
+    att_title = dict(q("""SELECT d.itemID, idv.value FROM itemData d
+                          JOIN fields f ON f.fieldID=d.fieldID
+                          JOIN itemDataValues idv ON idv.valueID=d.valueID
+                          WHERE f.fieldName='title'"""))
+    atts = {}
+    for aid, pid, ctype, path, akey in q(
+            """SELECT ia.itemID, ia.parentItemID, ia.contentType, ia.path, ai.key
+               FROM itemAttachments ia JOIN items ai ON ai.itemID=ia.itemID
+               WHERE ia.parentItemID IS NOT NULL"""):
+        if aid in trashed:
+            continue
+        # path 는 'storage:<파일명>'. 실제 파일은 storage/<첨부키>/<파일명> 에 있다
+        path = path or ''
+        fn = path.split('storage:', 1)[1] if path.startswith('storage:') else ''
+        full = os.path.join(ZOTERO, 'storage', akey, fn) if fn else ''
+        ok = bool(full) and os.path.exists(full)
+        atts.setdefault(pid, []).append({
+            'key': akey, 'title': att_title.get(aid) or fn or '첨부',
+            'is_pdf': ctype == 'application/pdf', 'filename': fn,
+            'linked': not fn,           # 링크만 걸린 첨부는 우리가 크기를 알 수 없다
+            'exists': ok,
+            'mb': round(os.path.getsize(full) / 1e6, 1) if ok else 0,
+        })
+
     items = []
-    for iid, itype in q("""SELECT i.itemID, it.typeName FROM items i
+    for iid, ikey, itype in q("""SELECT i.itemID, i.key, it.typeName FROM items i
                            JOIN itemTypes it ON it.itemTypeID=i.itemTypeID
                            WHERE it.typeName NOT IN ('attachment','note')"""):
+        if iid in trashed:
+            continue
         f = dict(q("""SELECT fl.fieldName, idv.value FROM itemData d
                       JOIN fields fl ON fl.fieldID=d.fieldID
                       JOIN itemDataValues idv ON idv.valueID=d.valueID
@@ -227,12 +259,18 @@ def api_zotero():
                    JOIN creators cr ON cr.creatorID=ic.creatorID
                    WHERE ic.itemID=? ORDER BY ic.orderIndex""", iid)]
         key = f.get('citationKey', '')
+        a = atts.get(iid, [])
         items.append({
             'itemType': itype, 'title': f.get('title', ''), 'authors': au,
             'date': (f.get('date', '') or '')[:10], 'doi': f.get('DOI', ''),
             'url': f.get('url', ''), 'venue': f.get('proceedingsTitle')
             or f.get('publicationTitle') or f.get('repository', ''),
             'cite_key': key, 'in_vault': key in have,
+            # zotero://select/library/items/<항목키> 로 Zotero 를 연다
+            'item_key': ikey,
+            'attachments': a,
+            # 정본에 적어둘 대표 PDF. raw/papers 의 zotero_key 가 이 값이다
+            'pdf_key': next((x['key'] for x in a if x['is_pdf'] and x['exists']), ''),
         })
     return {'ok': True, 'items': sorted(items, key=lambda x: x['in_vault'])}
 
@@ -243,6 +281,7 @@ def api_source(kind: str = Form(...), title: str = Form(...),
                topics: str = Form(''), authors: str = Form(''),
                date: str = Form(''), doi: str = Form(''), url: str = Form(''),
                venue: str = Form(''), cite_key: str = Form(''),
+               zotero_key: str = Form(''),
                filename: str = Form(''), queue: str = Form('')):
     """raw/ 에 정본 .md 를 만든다. PDF는 Zotero가 관리하므로 복사하지 않는다."""
     folder = {'paper': 'papers', 'article': 'articles', 'book': 'books',
@@ -260,7 +299,9 @@ def api_source(kind: str = Form(...), title: str = Form(...),
         L.append('author:')
         L += ['  - ' + a.strip() for a in authors.split(';') if a.strip()]
     for k, v in (('source', url), ('published', date), ('venue', venue),
-                 ('doi', doi), ('cite_key', cite_key)):
+                 ('doi', doi), ('cite_key', cite_key),
+                 # PDF 첨부키. 이게 있어야 위키에서 원문 PDF 로 되돌아갈 수 있다
+                 ('zotero_key', zotero_key)):
         if v:
             L.append(k + ': ' + v)
     L += ['collected: ' + str(datetime.date.today()),

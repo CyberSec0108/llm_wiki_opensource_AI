@@ -168,6 +168,23 @@ async function loadZotero() {
     r.appendChild(el('span', 'pill' + (it.in_vault ? '' : ' a'), it.in_vault ? '있음' : '신규'));
     const g = el('div', 'grow'); g.appendChild(el('div', '', it.title));
     g.appendChild(el('small', '', [it.authors[0], it.date, it.venue].filter(Boolean).join(' · ')));
+    // 첨부 — PDF 는 Zotero 리더로 바로 열고, 나머지는 항목만 띄운다.
+    // PDF 본문은 볼트에 두지 않는다는 규칙이라 링크로만 잇는다
+    const at = el('div', 'zot-att');
+    it.attachments.forEach(a => {
+      if (!a.is_pdf) return;
+      const link = el('a', 'pill' + (a.exists ? '' : ' muted'));
+      link.textContent = 'PDF' + (a.mb ? ' ' + a.mb + 'MB' : '');
+      link.title = a.exists ? a.filename : '파일이 로컬에 없다 — Zotero 에서 내려받아야 한다';
+      if (a.exists) link.href = 'zotero://open-pdf/library/items/' + a.key;
+      at.appendChild(link);
+    });
+    if (it.item_key) {
+      const z = el('a', 'pill', 'Zotero에서 보기');
+      z.href = 'zotero://select/library/items/' + it.item_key;
+      at.appendChild(z);
+    }
+    if (at.children.length) g.appendChild(at);
     r.appendChild(g);
     if (!it.in_vault) { const b = el('button', 'act', '폼에 채우기');
       b.onclick = () => { fill(it); document.querySelector('[data-t=add]').click();
@@ -177,6 +194,8 @@ async function loadZotero() {
   if (!d.items.length) box.textContent = 'Zotero 라이브러리가 비어 있습니다';
 }
 
+let ZOT_PDF = '';        // 폼에 채운 항목의 PDF 첨부키
+
 function fill(it) {
   $('#f_kind').value = it.itemType === 'conferencePaper' || it.itemType === 'preprint'
     || it.itemType === 'journalArticle' ? 'paper' : 'article';
@@ -184,6 +203,8 @@ function fill(it) {
   $('#f_date').value = it.date; $('#f_doi').value = it.doi;
   $('#f_cite').value = it.cite_key; $('#f_venue').value = it.venue; $('#f_url').value = it.url;
   $('#f_filename').value = '';
+  // 정본에 PDF 첨부키를 남겨야 나중에 위키에서 PDF 로 되돌아갈 수 있다
+  ZOT_PDF = it.pdf_key || '';
 }
 
 async function save(q) {
@@ -192,6 +213,7 @@ async function save(q) {
   const r = await post('/source', { kind: b('kind'), title: b('title'), why: b('why'),
     axis: b('axis'), topics: b('topics'), authors: b('authors'), date: b('date'),
     doi: b('doi'), url: b('url'), venue: b('venue'), cite_key: b('cite'),
+    zotero_key: ZOT_PDF,
     filename: b('filename'), queue: q ? '1' : '' });
   $('#saveMsg').textContent = r.ok
     ? '저장됨: ' + r.path + (r.queued ? '  · 대기열 추가' : '') : (r.error || '실패');
@@ -264,7 +286,21 @@ async function openPage(name) {
   const ob = el('a', 'pill'); ob.textContent = 'Obsidian에서 열기'; ob.style.cursor = 'pointer';
   ob.href = 'obsidian://open?vault=' + encodeURIComponent(d.vault) +
             '&file=' + encodeURIComponent(d.path.replace(/\.md$/, ''));
-  t.appendChild(ob); h.appendChild(t);
+  t.appendChild(ob);
+  // 논문 정본에는 zotero_key(PDF 첨부키)가 있다 — 원문으로 한 번에 건너뛴다.
+  // PDF 자체는 볼트에 두지 않는 규칙이라 링크로만 잇는다
+  if (d.meta.zotero_key) {
+    const z = el('a', 'pill', 'Zotero PDF 열기');
+    z.href = 'zotero://open-pdf/library/items/' + d.meta.zotero_key.trim();
+    z.title = 'Zotero 리더에서 원문 PDF를 연다';
+    t.appendChild(z);
+  } else if (d.meta.cite_key) {
+    const z = el('a', 'pill', 'Zotero에서 찾기');
+    z.href = 'zotero://select/items/@' + d.meta.cite_key.trim();
+    z.title = '인용키로 Zotero 항목을 고른다 (PDF 첨부키가 없을 때)';
+    t.appendChild(z);
+  }
+  h.appendChild(t);
   if (d.meta.source) h.appendChild(el('small', 'muted', '출처 ' + d.meta.source));
   if (d.meta.why) h.appendChild(el('small', 'muted', '왜 담았나 — ' + d.meta.why));
   if (d.layer === 'raw')
