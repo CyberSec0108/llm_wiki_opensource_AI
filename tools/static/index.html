@@ -6,7 +6,7 @@
 <title>LLM Wiki</title>
 <script>try{var _t=localStorage.getItem("llmwiki_theme");if(_t)document.documentElement.dataset.theme=_t;}catch(e){}</script>
 <script src="/static/restricted-markdown.js" defer></script>
-<link rel="stylesheet" href="/static/app.css?v=5">
+<link rel="stylesheet" href="/static/app.css?v=6">
 </head>
 <body>
 <header>
@@ -63,6 +63,17 @@
     </div>
     <div class="box">
       <h2>신규 데이터 수동 등록</h2>
+
+      <!-- Zotero 에서 채운 경우에만 뜬다. 서지정보는 접어두고
+           사람만 아는 것(축·왜 담았나·태그)을 앞으로 낸다 -->
+      <div class="zot-linked" id="zot-linked" hidden>
+        <div class="grow">
+          <b>Zotero에서 가져옴</b>
+          <small id="zot-linked-sum" class="muted"></small>
+        </div>
+        <button type="button" class="act" id="zot-detach">연결 해제</button>
+      </div>
+
       <div class="two">
         <div><label>종류</label>
           <select id="f_kind">
@@ -70,7 +81,7 @@
             <option value="book">책</option><option value="video">영상</option>
             <option value="writeup">라이트업</option><option value="note">직접 작성</option>
           </select></div>
-        <div><label>축 *</label>
+        <div><label>축 * <span class="muted" id="axis-hint"></span></label>
           <select id="f_axis">
             <option value="ai-for-security">AI활용 — AI로 보안을</option>
             <option value="securing-ai">AI보호 — AI를 지킨다</option>
@@ -79,17 +90,24 @@
           </select></div>
       </div>
       <label>제목 *</label><input id="f_title">
-      <label>파일명 (비우면 제목 사용)</label><input id="f_filename">
-      <div class="two">
-        <div><label>저자 (세미콜론으로 구분)</label><input id="f_authors"></div>
-        <div><label>연도·날짜</label><input id="f_date"></div>
-      </div>
-      <div class="two">
-        <div><label>DOI</label><input id="f_doi"></div>
-        <div><label>인용키</label><input id="f_cite"></div>
-      </div>
-      <label>게재지</label><input id="f_venue">
-      <label>URL</label><input id="f_url">
+
+      <details class="bibbox" id="bibbox">
+        <summary>서지정보 <span class="muted" id="bibsum">— 펼쳐서 입력</span></summary>
+        <div class="details-content">
+          <label>파일명 (비우면 제목 사용)</label><input id="f_filename">
+          <div class="two">
+            <div><label>저자 (세미콜론으로 구분)</label><input id="f_authors"></div>
+            <div><label>연도·날짜</label><input id="f_date"></div>
+          </div>
+          <div class="two">
+            <div><label>DOI</label><input id="f_doi"></div>
+            <div><label>인용키</label><input id="f_cite"></div>
+          </div>
+          <label>게재지</label><input id="f_venue">
+          <label>URL</label><input id="f_url">
+        </div>
+      </details>
+
       <label>왜 담았나 * <span class="muted">— 6개월 뒤 이 줄이 없으면 왜 저장했는지 모른다</span></label>
       <textarea id="f_why"></textarea>
       <label>주제 태그 <span class="muted">— 기존 태그를 먼저 재사용한다</span></label>
@@ -232,6 +250,6 @@
   </section>
 </main>
 
-<script src="/static/app.js?v=5" defer></script>
+<script src="/static/app.js?v=6" defer></script>
 </body>
 </html>

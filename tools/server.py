@@ -199,6 +199,40 @@ def api_tags():
                   key=lambda x: (-x['n'], x['tag']))
 
 
+# Zotero 는 전문 검색을 위해 PDF 텍스트를 미리 뽑아 storage/<첨부키>/ 에 둔다.
+# 우리가 PDF 파서를 새로 붙이지 않아도 되는 이유다 — 이미 추출된 것을 읽는다.
+FT_CACHE = '.zotero-ft-cache'
+
+
+def zotero_fulltext(attach_key):
+    """Zotero 가 뽑아둔 PDF 본문. 없으면 빈 문자열."""
+    if not attach_key:
+        return ''
+    p = os.path.join(ZOTERO, 'storage', attach_key, FT_CACHE)
+    if not os.path.exists(p):
+        return ''
+    t = io.open(p, encoding='utf-8', errors='replace').read()
+    # 페이지 넘김 문자와 과한 빈 줄만 걷어낸다.
+    # 원본 계층이라 문장 자체는 손대지 않는다 — 고치면 인용이 원문과 어긋난다
+    t = t.replace('\f', NL)
+    return re.sub(r'\n{3,}', NL + NL, t).strip()
+
+
+# 컬렉션 이름으로 연구 축을 짐작한다. 확정이 아니라 폼의 기본 선택일 뿐이고
+# 사람이 저장 전에 확인한다 — 지어낸 값을 조용히 쓰지는 않는다
+AXIS_HINT = ((('활용', 'for-security'), 'ai-for-security'),
+             (('보호', '지킨다', 'securing'), 'securing-ai'),
+             (('공통', 'both'), 'both'))
+
+
+def guess_axis(names):
+    low = ' '.join(names).lower()
+    hit = set(axis for words, axis in AXIS_HINT if any(w in low for w in words))
+    if len(hit) == 1:
+        return hit.pop()
+    return 'both' if len(hit) > 1 else ''
+
+
 @app.get('/api/zotero')
 def api_zotero():
     """Zotero 라이브러리를 읽는다. 원본은 잠겨 있을 수 있어 사본을 뜬다."""
@@ -244,6 +278,13 @@ def api_zotero():
             'mb': round(os.path.getsize(full) / 1e6, 1) if ok else 0,
         })
 
+    # 컬렉션 이름은 축을 짐작하는 단서다 (예: 'AI를 활용한 보안' -> ai-for-security)
+    cols = {}
+    for iid_, cname in q("""SELECT ci.itemID, c.collectionName
+                            FROM collectionItems ci
+                            JOIN collections c ON c.collectionID=ci.collectionID"""):
+        cols.setdefault(iid_, []).append(cname)
+
     items = []
     for iid, ikey, itype in q("""SELECT i.itemID, i.key, it.typeName FROM items i
                            JOIN itemTypes it ON it.itemTypeID=i.itemTypeID
@@ -260,6 +301,8 @@ def api_zotero():
                    WHERE ic.itemID=? ORDER BY ic.orderIndex""", iid)]
         key = f.get('citationKey', '')
         a = atts.get(iid, [])
+        cn = cols.get(iid, [])
+        pdf = next((x['key'] for x in a if x['is_pdf'] and x['exists']), '')
         items.append({
             'itemType': itype, 'title': f.get('title', ''), 'authors': au,
             'date': (f.get('date', '') or '')[:10], 'doi': f.get('DOI', ''),
@@ -270,7 +313,11 @@ def api_zotero():
             'item_key': ikey,
             'attachments': a,
             # 정본에 적어둘 대표 PDF. raw/papers 의 zotero_key 가 이 값이다
-            'pdf_key': next((x['key'] for x in a if x['is_pdf'] and x['exists']), ''),
+            'pdf_key': pdf,
+            'collections': cn,
+            'axis_guess': guess_axis(cn),
+            # 본문으로 가져올 수 있는 글자 수. 0 이면 Zotero 가 아직 안 뽑았다
+            'fulltext_chars': len(zotero_fulltext(pdf)) if pdf else 0,
         })
     return {'ok': True, 'items': sorted(items, key=lambda x: x['in_vault'])}
 
@@ -283,7 +330,12 @@ def api_source(kind: str = Form(...), title: str = Form(...),
                venue: str = Form(''), cite_key: str = Form(''),
                zotero_key: str = Form(''),
                filename: str = Form(''), queue: str = Form('')):
-    """raw/ 에 정본 .md 를 만든다. PDF는 Zotero가 관리하므로 복사하지 않는다."""
+    """raw/ 에 정본 .md 를 만든다.
+
+    PDF 파일 자체는 복사하지 않는다 — Zotero 가 관리한다는 볼트 규칙이다.
+    다만 Zotero 가 이미 뽑아둔 **본문 텍스트**는 가져온다. 본문이 없으면
+    인제스트가 근거를 못 찾아 위키 페이지를 만들 수 없기 때문이다.
+    """
     folder = {'paper': 'papers', 'article': 'articles', 'book': 'books',
               'video': 'videos', 'writeup': 'writeups', 'note': 'notes'}.get(kind, 'inbox')
     name = (filename or title)[:70].strip()
@@ -307,13 +359,20 @@ def api_source(kind: str = Form(...), title: str = Form(...),
     L += ['collected: ' + str(datetime.date.today()),
           'why: ' + why, 'axis: ' + axis, 'ingested: false', 'tags:']
     L += ['  - ' + t for t in tags]
-    L += ['---', '', '## 본문', '',
-          '(PDF는 Zotero가 관리한다. 본문 텍스트나 발췌를 여기 붙인다.)', '']
+    body = zotero_fulltext(zotero_key)
+    if body:
+        L += ['---', '', '## 본문', '',
+              '> [!note] Zotero 가 추출한 PDF 텍스트 (%d자). 원본 PDF 는 Zotero 에 있다.'
+              % len(body), '', body, '']
+    else:
+        L += ['---', '', '## 본문', '',
+              '(PDF는 Zotero가 관리한다. 본문 텍스트나 발췌를 여기 붙인다.)', '']
     wr(path, NL.join(L))
     rel = os.path.relpath(path, ROOT).replace(chr(92), '/')
     if queue:
         add_queue(rel, title)
-    return {'ok': True, 'path': rel, 'queued': bool(queue)}
+    return {'ok': True, 'path': rel, 'queued': bool(queue),
+            'body_chars': len(body)}
 
 
 def queue_items():

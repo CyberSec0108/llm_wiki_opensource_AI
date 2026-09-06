@@ -77,12 +77,11 @@ const doc = {
 };
 doc.documentElement.dataset = {};
 
-['qout', 'qq', 'qgo', 'qstop', 'qprofile', 'qshell', 'qsrc', 'qsrc-body',
- 'qsrc-toggle', 'qsrc-close', 'qform', 'qnew', 'qhead-title', 'themeToggle',
- 'q', 'plist', 'phead', 'pbody', 'stats', 'axisbar', 'axislbl', 'lintsum',
- 'stubs', 'queue', 'zot', 'tagchips', 'llmbox', 'pend', 'review', 'steps',
- 'jobmsg', 'jobout', 'jobbox', 'findings', 'lintcnt', 'obs', 'obsg', 'saveMsg',
- 'qhist-count', 'splitDrag', 'qhist-toggle'].forEach(id => { const e = mkEl('div'); e.id = id; registry[id] = e; });
+// id 목록을 손으로 들고 있으면 요소를 하나 추가할 때마다 검사가 깨진다.
+// index.html 에서 직접 뽑는다 — 화면이 늘어도 따라온다.
+[...html.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]).forEach(id => {
+  const e = mkEl('div'); e.id = id; registry[id] = e;
+});
 registry.qq.value = '';
 registry.qprofile.value = 'precise';
 

@@ -175,6 +175,7 @@ async function loadZotero() {
       if (!a.is_pdf) return;
       const link = el('a', 'pill' + (a.exists ? '' : ' muted'));
       link.textContent = 'PDF' + (a.mb ? ' ' + a.mb + 'MB' : '');
+      link.target = '_blank';
       link.title = a.exists ? a.filename : '파일이 로컬에 없다 — Zotero 에서 내려받아야 한다';
       if (a.exists) link.href = 'zotero://open-pdf/library/items/' + a.key;
       at.appendChild(link);
@@ -183,6 +184,17 @@ async function loadZotero() {
       const z = el('a', 'pill', 'Zotero에서 보기');
       z.href = 'zotero://select/library/items/' + it.item_key;
       at.appendChild(z);
+    }
+    // Zotero 가 PDF 텍스트를 이미 뽑아뒀는지. 없으면 정본 본문이 비어
+    // 인제스트가 근거를 못 찾는다 — 누르기 전에 알아야 한다
+    if (it.pdf_key) {
+      const ft = el('span', 'pill' + (it.fulltext_chars ? ' a' : ' muted'),
+        it.fulltext_chars ? '본문 ' + it.fulltext_chars.toLocaleString() + '자'
+                          : '본문 없음');
+      ft.title = it.fulltext_chars
+        ? 'Zotero 가 추출해 둔 텍스트. 저장할 때 정본 본문으로 들어간다'
+        : 'Zotero 에서 PDF 를 한 번 열면 텍스트가 추출된다';
+      at.appendChild(ft);
     }
     if (at.children.length) g.appendChild(at);
     r.appendChild(g);
@@ -196,6 +208,30 @@ async function loadZotero() {
 
 let ZOT_PDF = '';        // 폼에 채운 항목의 PDF 첨부키
 
+// Zotero 가 채운 칸과 사람만 아는 칸을 시각적으로 나눈다.
+// 서지정보는 Zotero 가 정확히 알고 있으니 손으로 칠 이유가 없다 —
+// 오타 하나로 cite_key 가 어긋나면 위키 인용이 통째로 끊어진다
+function zotLinked(it) {
+  const row = $('#zot-linked'), sum = $('#bibsum');
+  if (!it) {
+    ZOT_PDF = '';
+    row.hidden = true;
+    $('#bibbox').open = true;
+    sum.textContent = '— 펼쳐서 입력';
+    $('#axis-hint').textContent = '';
+    return;
+  }
+  ZOT_PDF = it.pdf_key || '';
+  row.hidden = false;
+  $('#zot-linked-sum').textContent = ' · ' + [
+    it.authors[0], it.date, it.venue, it.cite_key,
+    it.fulltext_chars ? '본문 ' + it.fulltext_chars.toLocaleString() + '자'
+                      : '본문 없음',
+  ].filter(Boolean).join(' · ');
+  $('#bibbox').open = false;                  // 맞다고 보고 접는다
+  sum.textContent = '— Zotero 가 채웠다. 틀렸을 때만 펼쳐서 고쳐라';
+}
+
 function fill(it) {
   $('#f_kind').value = it.itemType === 'conferencePaper' || it.itemType === 'preprint'
     || it.itemType === 'journalArticle' ? 'paper' : 'article';
@@ -203,9 +239,18 @@ function fill(it) {
   $('#f_date').value = it.date; $('#f_doi').value = it.doi;
   $('#f_cite').value = it.cite_key; $('#f_venue').value = it.venue; $('#f_url').value = it.url;
   $('#f_filename').value = '';
-  // 정본에 PDF 첨부키를 남겨야 나중에 위키에서 PDF 로 되돌아갈 수 있다
-  ZOT_PDF = it.pdf_key || '';
+  // 컬렉션 이름으로 짐작한 축을 미리 골라둔다. 확정이 아니라 제안이라
+  // 어디서 나온 값인지 옆에 밝힌다 — 사람이 보고 넘어가야 한다
+  if (it.axis_guess) {
+    $('#f_axis').value = it.axis_guess;
+    $('#axis-hint').textContent = '— 컬렉션 「' + it.collections.join(', ') + '」에서 추정';
+  } else {
+    $('#axis-hint').textContent = '';
+  }
+  zotLinked(it);
 }
+
+$('#zot-detach').onclick = () => zotLinked(null);
 
 async function save(q) {
   const b = id => $('#f_' + id).value.trim();
@@ -216,7 +261,9 @@ async function save(q) {
     zotero_key: ZOT_PDF,
     filename: b('filename'), queue: q ? '1' : '' });
   $('#saveMsg').textContent = r.ok
-    ? '저장됨: ' + r.path + (r.queued ? '  · 대기열 추가' : '') : (r.error || '실패');
+    ? '저장됨: ' + r.path + (r.body_chars ? '  · 본문 ' + r.body_chars.toLocaleString() + '자'
+        : '  · 본문 비어 있음') + (r.queued ? '  · 대기열 추가' : '')
+    : (r.error || '실패');
   if (r.ok) { ['title', 'why', 'authors', 'date', 'doi', 'cite', 'venue', 'url', 'topics', 'filename']
     .forEach(k => $('#f_' + k).value = '');
     document.querySelectorAll('.chip.on').forEach(c => c.classList.remove('on'));
