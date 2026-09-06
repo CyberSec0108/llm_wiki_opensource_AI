@@ -90,6 +90,7 @@ def wiki_pages():
             'description': g('description').strip('"'),
             'needs_source': 'needs_source: true' in fm,
             'sources': len(re.findall(r'(raw/[^\s]+\.md|[a-z]+\d{4}[A-Za-z]+)', fm)),
+            'mtime': os.path.getmtime(p),
         })
     return out
 
@@ -109,6 +110,7 @@ def raw_files():
             'why': g('why').strip('"'),
             'ingested': 'ingested: true' in fm,
             'topics': re.findall(r'주제/[^\s"\',\]]+', fm),
+            'mtime': os.path.getmtime(p),
         })
     return out
 
@@ -458,13 +460,60 @@ def api_browse():
     out = []
     for r in wiki_pages():
         out.append({'name': r['name'], 'layer': 'wiki', 'axis': r.get('axis', ''),
-                    'status': r.get('status', ''), 'sub': r.get('description', '')})
+                    'status': r.get('status', ''), 'sub': r.get('description', ''), 'mtime': r.get('mtime', 0)})
     for r in raw_files():
         out.append({'name': os.path.basename(r['path'])[:-3], 'layer': 'raw',
                     'axis': r.get('axis', ''),
                     'status': 'ingested' if r.get('ingested') else '미인제스트',
-                    'sub': r['path'], 'path': r['path']})
+                    'sub': r['path'], 'path': r['path'], 'mtime': r.get('mtime', 0)})
     return out
+
+
+@app.get('/api/graph')
+def api_graph():
+    """지식 그래프를 위한 전체 노드와 엣지를 계산한다."""
+    nodes = []
+    edges = []
+    
+    all_files = []
+    for d in ('wiki', 'context', 'docs'):
+        all_files.extend(glob.glob(os.path.join(ROOT, d, '*.md')))
+        
+    valid_names = set()
+    for p in all_files:
+        b = os.path.basename(p)[:-3]
+        if b in ('index', 'log', 'review', 'CLAUDE') or '.example' in b:
+            continue
+        rel = os.path.relpath(p, ROOT).replace(chr(92), '/')
+        if rel.startswith('context/'):
+            continue
+        valid_names.add(b)
+        
+        layer = rel.split('/')[0]
+        fm = fm_of(rd(p))
+        axis = ('ai-for-security' if 'ai-for-security' in fm else
+                'securing-ai' if 'securing-ai' in fm else '')
+        
+        nodes.append({
+            'id': b,
+            'label': b,
+            'layer': layer,
+            'axis': axis
+        })
+        
+    for p in all_files:
+        b = os.path.basename(p)[:-3]
+        if b not in valid_names:
+            continue
+        text = rd(p)
+        body = text[len(fm_of(text)):]
+        out = set(re.findall(r'\[\[([^\]|#]+)', re.sub(r'`[^`]*`', '', body)))
+        for target in out:
+            target = target.strip()
+            if target in valid_names:
+                edges.append({'from': b, 'to': target})
+                
+    return {'nodes': nodes, 'edges': edges}
 
 
 @app.get('/api/page')

@@ -9,42 +9,62 @@
 <link rel="stylesheet" href="/static/app.css?v=6">
 </head>
 <body>
-<header>
-  <h1>LLM Wiki</h1>
-  <nav>
-    <button class="on" data-t="s">대시보드</button>
-    <button data-t="wiki">지식베이스</button>
-    <button data-t="query">AI 탐색</button>
-    <button data-t="add">데이터 등록</button>
-    <button data-t="ing">지식화 처리</button>
-    <button data-t="lint">품질 진단</button>
+<aside id="sidebar" class="sidebar">
+  <div class="sidebar-header">
+    <h1>LLM Wiki</h1>
+    <button class="act" id="sidebar-toggle" title="사이드바 토글">☰</button>
+  </div>
+    <nav class="sidebar-nav">
+    <button class="on" data-t="s"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg></span><span class="label">대시보드</span></button>
+    <button data-t="wiki"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg></span><span class="label">지식베이스</span></button>
+    <button data-t="query"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span><span class="label">AI 탐색</span></button>
+    <button data-t="add"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M12 8v8"/><path d="M8 12h8"/></svg></span><span class="label">데이터 등록</span></button>
+    <button data-t="ing"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><span class="label">지식화 처리</span></button>
+    <button data-t="lint"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span><span class="label">품질 진단</span></button>
   </nav>
-  <div class="hdr-util">
-    <a id="obs" class="pill" href="#" title="Obsidian을 연다. 그래프는 좌측 사이드바의 그래프 아이콘">
-      Obsidian 열기</a>
+  <div class="sidebar-footer">
+    <a id="obs" class="pill" href="#" title="Obsidian을 연다.">Obsidian 열기</a>
     <button class="act" id="themeToggle" title="다크모드 전환">🌓</button>
   </div>
-</header>
 
-<main>
-  <!-- 대시보드 -->
+</aside>
+
+<main id="app-main">
+    <!-- 대시보드 -->
   <section id="s" class="on">
-    <div class="cards" id="stats"></div>
-    <div class="dashboard-grid">
-      <div class="box"><h2>분석 주제 (연구 축)</h2><div class="bar" id="axisbar"></div>
-        <div class="chips" id="axislbl" style="margin-top:9px"></div></div>
-      <div class="box"><h2>최근 품질 진단</h2><div id="lintsum" class="muted">불러오는 중…</div></div>
-      <div class="box span-full">
-        <details class="dashboard-details" open>
+    <div class="dashboard-stats-grid" id="stats"></div>
+    <div class="dashboard-content-grid">
+      <div class="box graph-box" id="knowledge-graph" style="height:500px">
+        <span class="muted">지식 그래프 불러오는 중...</span>
+      </div>
+      <div class="box recent-docs-box">
+        <h2 style="margin-top:0">최신 위키 문서</h2>
+        <div id="recent-docs" class="list" style="max-height:200px;overflow-y:auto;margin-bottom:12px"></div>
+        
+        <details class="dashboard-details">
+          <summary><h2>분석 주제 (연구 축)</h2></summary>
+          <div class="details-content">
+            <div class="bar" id="axisbar"></div>
+            <div class="chips" id="axislbl" style="margin-top:9px"></div>
+          </div>
+        </details>
+        
+        <details class="dashboard-details">
+          <summary><h2>최근 품질 진단</h2></summary>
+          <div class="details-content">
+            <div id="lintsum" class="muted">불러오는 중…</div>
+          </div>
+        </details>
+        
+        <details class="dashboard-details">
           <summary><h2>작성 대기 문서 (Stubs)</h2></summary>
           <div class="details-content">
             <div id="stubs"></div>
-            <div class="note">참조 횟수만 센 것이다. <b>원본 근거 1,200B와 사례 유무</b>는 <code>/lint</code>에서 확인한다.</div>
+            <div class="note">참조 횟수만 센 것이다.</div>
           </div>
         </details>
-      </div>
-      <div class="box span-full">
-        <details class="dashboard-details" open>
+        
+        <details class="dashboard-details">
           <summary><h2>지식화 처리 대기열</h2></summary>
           <div class="details-content">
             <div id="queue" class="muted"></div>
@@ -192,8 +212,7 @@
         <div class="note" style="margin-top:auto;font-size:11px">
           대화 기록 저장은 아직 없다. 위는 준비 중인 모습이다.</div>
       </aside>
-
-      <!-- 가운데: 질문과 답변 -->
+<!-- 가운데: 질문과 답변 -->
       <div class="qmain">
         <div class="qhead">
           <div>
@@ -235,7 +254,7 @@
         </div>
         <div id="qsrc-body"><p class="muted">답변이 나오면 사용한 위키 페이지가 여기 표시된다.</p></div>
       </aside>
-    </div>
+</div>
   </section>
 
   <!-- 품질 진단 -->
@@ -250,6 +269,9 @@
   </section>
 </main>
 
-<script src="/static/app.js?v=6" defer></script>
+<script src="/static/vendor/vis-network.min.js"></script>`n<script src="/static/app.js?v=6" defer></script>
 </body>
 </html>
+
+
+

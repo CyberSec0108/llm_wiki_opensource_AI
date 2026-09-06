@@ -8,13 +8,34 @@ const post = (p, d) => fetch('/api' + p, { method: 'POST',
 // 다크모드 — OS 설정을 기본으로 따르되, 눌러서 명시적으로 바꿀 수 있다
 (() => {
   const btn = $('#themeToggle');
-  const apply = t => { document.documentElement.dataset.theme = t;
-    try { localStorage.setItem('llmwiki_theme', t); } catch (_) {} };
+  const apply = t => {
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem('llmwiki_theme', t); } catch (_) {}
+    if (window.network) {
+      const isD = t === 'dark';
+      window.network.setOptions({
+        nodes: { font: { color: isD ? '#e4ecf3' : '#172b3a' } },
+        edges: { color: { color: isD ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' } }
+      });
+    }
+  };
   btn.onclick = () => {
     const cur = document.documentElement.dataset.theme ||
       (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
     apply(cur === 'dark' ? 'light' : 'dark');
   };
+})();
+
+
+(() => {
+  const sidebar = document.getElementById('sidebar');
+  const toggle = document.getElementById('sidebar-toggle');
+  if (sidebar && toggle) {
+    toggle.onclick = () => {
+      sidebar.classList.toggle('collapsed');
+      if (window.network) setTimeout(() => window.network.fit(), 300);
+    };
+  }
 })();
 
 // 위키 탭 목록 폭 조절 — 손잡이를 끌면 .split 의 --splitw 를 바꾼다.
@@ -66,10 +87,84 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 const AX = { 'ai-for-security': ['AI활용', 'a'], 'securing-ai': ['AI보호', 'b'],
              'both': ['공통', ''], 'none': ['기타', ''] };
 
+
+async function loadRecentDocs() {
+  const docs = await get('/browse');
+  const box = document.getElementById('recent-docs');
+  if (!box) return;
+  box.innerHTML = '';
+  const recent = docs.sort((a, b) => (b.mtime || 0) - (a.mtime || 0)).slice(0, 5);
+  recent.forEach(h => {
+    const d = el('div', 'item');
+    const r = el('div', 'item-head');
+    r.appendChild(el('span', 'lay lay-' + h.layer, layName(h.layer)));
+    const nm = el('span', 'item-name', h.name);
+    nm.title = h.name;
+    r.appendChild(nm);
+    d.appendChild(r);
+    d.appendChild(el('small', '', (h.folder || '') + (h.mtime ? ' · ' + new Date(h.mtime * 1000).toLocaleString() : '')));
+    if (h.openable) d.onclick = () => {
+      document.querySelector('[data-t="wiki"]').click();
+      openPage(h.path || h.name);
+    };
+    box.appendChild(d);
+  });
+  if (!recent.length) box.innerHTML = '<div class="muted">문서가 없습니다.</div>';
+}
+
+async function initGraph() {
+  const container = document.getElementById('knowledge-graph');
+  if (!container || !window.vis) return;
+  
+  const d = await get('/graph');
+  if (!d.nodes) {
+    container.innerHTML = '<span class="muted">그래프 데이터를 불러오지 못했습니다.</span>';
+    return;
+  }
+  
+  const nodes = new vis.DataSet(d.nodes.map(n => ({
+    id: n.id,
+    label: n.label,
+    group: n.layer,
+    title: n.id
+  })));
+  
+  const edges = new vis.DataSet(d.edges.map(e => ({
+    from: e.from,
+    to: e.to
+  })));
+  
+  const isDark = document.documentElement.dataset.theme === 'dark' || (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme:dark)').matches);
+  const textColor = isDark ? '#e4ecf3' : '#172b3a';
+  const edgeColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)';
+  const nodeColors = {
+    wiki: { background: isDark ? '#132131' : '#ffffff', border: '#0c5aa6' },
+    raw: { background: isDark ? '#132131' : '#ffffff', border: '#4fb477' }
+  };
+
+  const data = { nodes, edges };
+  const options = {
+    nodes: { shape: 'dot', size: 16, font: { color: textColor, size: 12 }, borderWidth: 2 },
+    edges: { width: 1, smooth: { type: 'continuous' }, color: { color: edgeColor } },
+    groups: { wiki: { color: nodeColors.wiki }, raw: { color: nodeColors.raw } },
+    physics: { barnesHut: { gravitationalConstant: -2000, centralGravity: 0.3, springLength: 95 }, stabilization: { iterations: 100 } },
+    interaction: { hover: true, tooltipDelay: 200 }
+  };
+  
+  window.network = new vis.Network(container, data, options);
+  
+  window.network.on("click", function (params) {
+    if (params.nodes.length > 0) {
+      document.querySelector('[data-t="wiki"]').click();
+      openPage(params.nodes[0]);
+    }
+  });
+}
+
+
 async function loadStatus() {
   const d = await get('/status');
-  const cards = [['페이지', d.pages], ['원본', d.raw], ['처리 대기', d.pending],
-                 ['보강대기', d.needs_source], ['stable', d.stable], ['대기열', d.queue]];
+  const cards = [['문서 총합', d.pages + d.raw], ['처리 대기', d.pending], ['보강 필요', d.needs_source], ['안정됨', d.stable]];
   $('#stats').innerHTML = '';
   cards.forEach(([k, v]) => { const c = el('div', 'stat');
     c.appendChild(el('b', '', v)); c.appendChild(el('span', '', k)); $('#stats').appendChild(c); });
@@ -380,7 +475,7 @@ $('#q').oninput = e => { clearTimeout(qt); const v = e.target.value.trim();
   qt = setTimeout(async () => v ? drawList(await get('/search?q=' + encodeURIComponent(v)))
     : drawList(), 250); };
 
-loadStatus(); loadStubs(); loadLint(); loadTags(); loadZotero(); loadWiki();
+loadStatus(); loadStubs(); loadLint(); loadTags(); loadZotero(); loadWiki(); loadRecentDocs(); setTimeout(initGraph, 100);
 
 // 새 탭으로 열린 경우 — /?tab=wiki&page=... 를 읽어 그 페이지를 바로 띄운다
 (() => {
@@ -927,4 +1022,5 @@ async function tick(jid) {
   }
   if (d.done) { clearInterval(poll); poll = null; drawIngest(); loadStatus(); }
 }
+
 
