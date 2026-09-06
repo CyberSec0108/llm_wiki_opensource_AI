@@ -8,8 +8,7 @@ const vm = require('vm');
 const base = 'c:/Users/Hala/Desktop/Sec_Obsidian/tools/static/';
 const html = fs.readFileSync(base + 'index.html', 'utf8');
 const rmd = fs.readFileSync(base + 'restricted-markdown.js', 'utf8');
-const app = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
-  .map(m => m[1]).pop();
+const app = fs.readFileSync(base + 'app.js', 'utf8');
 
 function mkEl(tag) {
   const cls = new Set();
@@ -83,7 +82,7 @@ doc.documentElement.dataset = {};
  'q', 'plist', 'phead', 'pbody', 'stats', 'axisbar', 'axislbl', 'lintsum',
  'stubs', 'queue', 'zot', 'tagchips', 'llmbox', 'pend', 'review', 'steps',
  'jobmsg', 'jobout', 'jobbox', 'findings', 'lintcnt', 'obs', 'obsg', 'saveMsg',
- 'qhist-count', 'splitDrag'].forEach(id => { const e = mkEl('div'); e.id = id; registry[id] = e; });
+ 'qhist-count', 'splitDrag', 'qhist-toggle'].forEach(id => { const e = mkEl('div'); e.id = id; registry[id] = e; });
 registry.qq.value = '';
 registry.qprofile.value = 'precise';
 
