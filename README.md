@@ -318,16 +318,41 @@ python tools/server.py --lan        # 같은 와이파이의 다른 기기에서
 - **서버를 꺼도** Obsidian·git·Claude Code가 그대로 동작합니다.
 - **인제스트는 자동 반영하지 않습니다.** 결과를 먼저 보여주고, 적용은 사용자가 누릅니다.
 
-### 6) UI 회귀 검사
+### 6) 프런트엔드 구성
+
+빌드 도구·번들러·프레임워크가 없습니다. 브라우저가 파일 4개를 그대로 읽습니다.
+
+```text
+tools/static/
+├── index.html              마크업만 (약 230줄)
+├── app.css                 전체 스타일
+├── app.js                  전체 동작
+└── restricted-markdown.js  화이트리스트 마크다운 렌더러 (의존성 없음)
+```
+
+`index.html`이 `?v=4` 같은 쿼리로 캐시를 무력화합니다. **CSS나 JS를 고쳤는데 화면이 안 바뀌면 이 숫자를 올리세요.**
+서버는 `tools/static/` 폴더를 통째로 `/static`에 내보내므로 파일을 추가해도 설정할 것이 없습니다.
+
+### 7) UI 회귀 검사
 
 브라우저 없이 확인할 수 있게 Node의 `vm`으로 가짜 DOM을 만들어 검사합니다.
 (외부 의존성 없음 — Node만 있으면 됩니다.)
 
 ```bash
-node tools/test/syntax.js     # 인라인 스크립트 파싱
-node tools/test/render.js     # 답변 렌더 + 대화가 아래로 쌓이는지
+node tools/test/syntax.js     # index.html 이 부르는 스크립트·스타일시트 전부 파싱
+node tools/test/render.js     # 답변이 실제로 그려지는지 + 대화가 아래로 쌓이는지
 node tools/test/wikilist.js   # 목록 제목 자르기 + 폭 조절 손잡이
 ```
+
+| 파일 | 하는 일 |
+|---|---|
+| `harness.js` | 가짜 DOM. 나머지 검사가 공유합니다 |
+| `syntax.js` | `index.html`을 읽어 **거기 적힌 `<script src>`·`<link>`를 따라가** 파싱합니다. 파일 이름을 검사 쪽에 적어두지 않아서, 파일이 늘거나 이름이 바뀌어도 따라갑니다 |
+| `render.js` | 스트리밍 이벤트를 흘려 넣고 답변 DOM과 인용 버튼이 생기는지 봅니다 |
+| `wikilist.js` | 목록을 두 경로(검색 결과 / 전체 목록)로 각각 그려 확인합니다 |
+
+> **왜 이렇게까지 하나**: 패치가 함수를 통째로 날려 답변이 아예 안 그려진 적이 있습니다.
+> 화면을 볼 수 없는 상태에서 그런 사고를 잡으려면 기계적인 확인이 필요합니다.
 
 ---
 
@@ -365,8 +390,14 @@ node tools/test/wikilist.js   # 목록 제목 자르기 + 폭 조절 손잡이
 │   ├── query.py          # query 파이프라인 (CLI + 웹 스트리밍)
 │   ├── lint.py           # lint — LLM 없이 도는 정적 분석
 │   ├── server.py         # 웹 UI 서버 (FastAPI)
-│   ├── static/           # 단일 페이지 프런트엔드 (빌드 도구 없음)
+│   ├── static/           # 프런트엔드 — 빌드 도구 없음
+│   │   ├── index.html    #   마크업
+│   │   ├── app.css       #   스타일
+│   │   ├── app.js        #   동작
+│   │   └── restricted-markdown.js  # 화이트리스트 마크다운 렌더러
 │   └── test/             # 브라우저 없는 UI 회귀 검사 (Node vm)
+│       ├── harness.js    #   가짜 DOM (공용)
+│       └── *.js          #   개별 검사
 ├── wiki/                 # 컴파일된 핵심 지식 계층
 │   ├── _archive/         # 폐기/대체된 문서 보관소
 │   ├── index.example.md  # 위키 전체 목차 템플릿
